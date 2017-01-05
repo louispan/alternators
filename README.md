@@ -1,0 +1,1 @@
+Handy function when using transformers
