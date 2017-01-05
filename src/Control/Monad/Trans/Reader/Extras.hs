@@ -4,7 +4,13 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Morph
 import Data.Functor.Identity
 
--- | This function combines two different monadic effects.
+-- | This function combines two different monadic effects,
+-- where one of the effects is a reader effect and the other is a
+-- producing effect.
+--
+-- This version results in the reader monad's inner effect to be wrapped
+-- around the producing effect.
+-- This requires the Reader inner effect to be an MFunctor on Identity.
 --
 -- This can enable past-Dependence.
 -- Elm has foldp : (a -> state -> state) -> state -> Signal a -> Signal state
@@ -24,3 +30,12 @@ runReaderM :: (Monad m, Monad (t m), MonadTrans t, MFunctor t)
 runReaderM c as = do
   a <- lift as
   hoist generalize $ runReaderT c a
+
+-- | An alternate form of runReaderM where the producing effect is
+-- wrapped around the reader monad's inner effect.
+-- This requires the producing effect to be an MFunctor on Identity.
+runReaderM' :: (Monad m, Monad (t m), MonadTrans t, MFunctor t)
+  => ReaderT a m c -> (t Identity) a -> t m c
+runReaderM' c as = do
+  a <- hoist generalize as
+  lift $ runReaderT c a
