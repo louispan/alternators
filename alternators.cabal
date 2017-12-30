@@ -21,8 +21,8 @@ library
                        Control.Monad.Trans.State.Lazy.Extras
                        Control.Monad.Trans.State.Strict.Extras
   build-depends:       base >= 4.7 && < 5
-                     , mmorph >= 1 && < 2
-                     , transformers >= 0.4 && < 0.6
+                     , mmorph >= 1
+                     , transformers >= 0.4
   ghc-options:         -Wall
   default-language:    Haskell2010
 
