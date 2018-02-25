@@ -1,5 +1,5 @@
 name:                alternators
-version:             0.1.2.0
+version:             0.1.3.0
 synopsis:            Handy functions when using transformers
 description:         Please see README.md
 homepage:            https://github.com/louispan/alternators#readme
@@ -16,7 +16,8 @@ tested-with:         GHC == 7.10.3, GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Control.Monad.Trans.Reader.Extras
+  exposed-modules:     Control.Monad.Trans.Cont.Extras
+                       Control.Monad.Trans.Reader.Extras
                        Control.Monad.Trans.Maybe.Extras
                        Control.Monad.Trans.State.Lazy.Extras
                        Control.Monad.Trans.State.Strict.Extras
