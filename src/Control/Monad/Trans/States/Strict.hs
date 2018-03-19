@@ -5,7 +5,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -13,7 +12,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 #endif
 
-module Control.Monad.Trans.Readr where
+module Control.Monad.Trans.States.Strict where
 
 import Control.Applicative
 import Control.Lens
@@ -23,16 +22,16 @@ import Control.Monad.Fail
 import Control.Monad.Fix
 import Control.Monad.Morph
 import Control.Monad.Reader
-import Control.Monad.State.Class
+import Control.Monad.State.Strict
 import Control.Monad.Writer.Class
-import Control.Monad.Zip
 import Control.Newtype
 import Data.Coerce
 import Data.Semigroup
 import qualified GHC.Generics as G
 
--- | A newtype wrapper around ReaderT for custom monoid instances
-newtype ReadrT r m a = ReadrT { runReadrT :: ReaderT r m a }
+-- | A newtype wrapper around StateT for lifted monoid instances.
+-- Memonic: the @s@ means plural, alluding to the monoidal property.
+newtype StatesT s m a = StatesT { runStatesT :: StateT s m a }
     deriving
     ( G.Generic
     , MonadTrans
@@ -41,56 +40,49 @@ newtype ReadrT r m a = ReadrT { runReadrT :: ReaderT r m a }
     , MonadFix
     , MonadFail
     , Applicative
-    , MonadZip
     , MonadIO
     , Alternative
     , MonadPlus
     , MonadReader r
+    , MonadState s
+    , MonadWriter w
+    , MonadError e
     , MFunctor
-    , MMonad
+    , MonadCont
     )
 
-pattern ReadrT' :: (r -> m a) -> ReadrT r m a
-pattern ReadrT' f = ReadrT (ReaderT f)
+pattern StatesT' :: (s -> m (a, s)) -> StatesT s m a
+pattern StatesT' f = StatesT (StateT f)
 
 #if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE ReadrT_ #-}
+{-# COMPLETE StatesT_ #-}
 #endif
 
-readrT' :: (r -> m a) -> ReadrT r m a
-readrT' = coerce
+statesT' :: (s -> m (a, s)) -> StatesT s m a
+statesT' = coerce
 
-runReadrT' :: ReadrT r m a -> r -> m a
-runReadrT' = coerce
+runStatesT' :: StatesT s m a -> s -> m (a, s)
+runStatesT' = coerce
 
-instance Newtype (ReadrT r m a)
+instance Newtype (StatesT s m a)
 
-deriving instance MonadWriter w m => MonadWriter w (ReadrT r m)
-deriving instance MonadState s m => MonadState s (ReadrT r m)
-deriving instance MonadError e m => MonadError e (ReadrT r m)
-deriving instance MonadCont m => MonadCont (ReadrT r m)
-
-type instance Magnified (ReadrT r m) = Magnified (ReaderT r m)
-instance Monad m => Magnify (ReadrT s m) (ReadrT t m) s t where
-    magnify l (ReadrT f) = ReadrT (magnify l f)
-
-type instance Zoomed (ReadrT e m) = Zoomed (ReaderT e m)
-instance Zoom m n s t => Zoom (ReadrT e m) (ReadrT e n) s t where
-    zoom l (ReadrT f) = ReadrT (zoom l f)
+type instance Zoomed (StatesT s m) = Zoomed (StateT s m)
+instance (Monad m) => Zoom (StatesT s m) (StatesT t m) s t where
+    zoom l (StatesT f) = StatesT (zoom l f)
 
 -- | This is the reason for the newtye wrapper
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instance runs both.
 -- This Semigroup instance is the same as @(->) r@
-instance (Semigroup (m a)) => Semigroup (ReadrT r m a) where
-    (ReadrT (ReaderT f)) <> (ReadrT (ReaderT g)) = ReadrT (ReaderT (f <> g))
+instance (Semigroup a, Monad m) => Semigroup (StatesT s m a) where
+    (StatesT f) <> (StatesT g) = StatesT (liftA2 (<>) f g)
 
 -- | This is the reason for the newtye wrapper
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instances runs both.
 -- This Monoid instance is the same as @(->) r@
-instance (Monoid (m a)) => Monoid (ReadrT r m a) where
-    mempty = ReadrT (ReaderT mempty)
-    (ReadrT (ReaderT f)) `mappend` (ReadrT (ReaderT g)) = ReadrT (ReaderT (f `mappend` g))
+instance (Monoid a, Monad m) => Monoid (StatesT s m a) where
+    mempty = StatesT (pure mempty)
+    (StatesT f) `mappend` (StatesT g) = StatesT (liftA2 mappend f g)
