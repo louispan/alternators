@@ -50,18 +50,26 @@ newtype RWSsT r w s m a = RWSsT { runRWSsT :: RWST r w s m a }
     , MonadCont
     )
 
+type RWSs r w s  = RWSsT r w s Identity
+
 pattern RWSsT' :: (r -> s -> m (a, s, w)) -> RWSsT r w s m a
 pattern RWSsT' f = RWSsT (RWST f)
 
 #if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE RWSsT_ #-}
+{-# COMPLETE RWSsT' #-}
 #endif
 
 rwssT' :: (r -> s -> m (a, s, w)) -> RWSsT r w s m a
 rwssT' = coerce
 
+rwss' :: (r -> s -> (a, s, w)) -> RWSs r w s a
+rwss' k = RWSsT (rws k)
+
 runRWSsT' :: RWSsT r w s m a -> r -> s -> m (a, s, w)
 runRWSsT' = coerce
+
+runRWSs' :: RWSs r w s a -> r -> s -> (a, s, w)
+runRWSs' (RWSsT m) = runRWS m
 
 instance Newtype (RWSsT r w s m a)
 

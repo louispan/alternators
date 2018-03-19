@@ -54,18 +54,26 @@ newtype ReadersT r m a = ReadersT { runReadersT :: ReaderT r m a }
     , MMonad
     )
 
+type Readers r  = ReadersT r Identity
+
 pattern ReadersT' :: (r -> m a) -> ReadersT r m a
 pattern ReadersT' f = ReadersT (ReaderT f)
 
 #if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE ReadersT_ #-}
+{-# COMPLETE ReadersT' #-}
 #endif
 
 readersT' :: (r -> m a) -> ReadersT r m a
 readersT' = coerce
 
+readers' :: (r -> a) -> Readers r a
+readers' k = ReadersT (reader k)
+
 runReadersT' :: ReadersT r m a -> r -> m a
 runReadersT' = coerce
+
+runReaders' :: Readers r a -> r -> a
+runReaders' (ReadersT m) = runReader m
 
 instance Newtype (ReadersT r m a)
 

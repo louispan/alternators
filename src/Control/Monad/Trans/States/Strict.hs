@@ -55,14 +55,22 @@ pattern StatesT' :: (s -> m (a, s)) -> StatesT s m a
 pattern StatesT' f = StatesT (StateT f)
 
 #if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE StatesT_ #-}
+{-# COMPLETE StatesT' #-}
 #endif
+
+type States s  = StatesT s Identity
 
 statesT' :: (s -> m (a, s)) -> StatesT s m a
 statesT' = coerce
 
+states' :: (s -> (a, s)) -> States s a
+states' k = StatesT (state k)
+
 runStatesT' :: StatesT s m a -> s -> m (a, s)
 runStatesT' = coerce
+
+runStates' :: States s a -> s -> (a, s)
+runStates' (StatesT m) = runState m
 
 instance Newtype (StatesT s m a)
 

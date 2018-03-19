@@ -23,6 +23,7 @@ import Control.Monad.State.Class
 import Control.Monad.Zip
 import Control.Newtype
 import Data.Coerce
+import Data.Functor.Identity
 import Data.Semigroup
 import qualified GHC.Generics as G
 
@@ -40,18 +41,26 @@ newtype DelegateT m a = DelegateT { runDelegateT :: ContT () m a }
     , MonadCont
     )
 
+type Delegate = DelegateT Identity
+
 pattern DelegateT' :: ((a -> m ()) -> m ()) -> DelegateT m a
 pattern DelegateT' f = DelegateT (ContT f)
 
 #if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE ReadrT_ #-}
+{-# COMPLETE DelegateT' #-}
 #endif
 
 delegateT' :: ((a -> m ()) -> m ()) -> DelegateT m a
 delegateT' = coerce
 
+delegate' :: ((a -> ()) -> ()) -> Delegate a
+delegate' k = DelegateT (cont k)
+
 runDelegateT' :: DelegateT m a -> (a -> m ()) -> m ()
 runDelegateT' = coerce
+
+runDelegate' :: Delegate a -> (a -> ()) -> ()
+runDelegate' (DelegateT m) = runCont m
 
 instance Newtype (DelegateT m a)
 
