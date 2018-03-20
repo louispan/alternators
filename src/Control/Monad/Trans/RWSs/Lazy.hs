@@ -8,9 +8,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-#if __GLASGOW_HASKELL__ < 802
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-#endif
+-- #if __GLASGOW_HASKELL__ < 802
+-- {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+-- #endif
 
 module Control.Monad.Trans.RWSs.Lazy where
 
@@ -24,13 +24,12 @@ import Control.Monad.Morph
 import Control.Monad.Reader
 import Control.Monad.RWS.Lazy hiding ((<>))
 import Control.Newtype
-import Data.Coerce
 import Data.Semigroup
 import qualified GHC.Generics as G
 
 -- | A newtype wrapper around RWST for lifted monoid instances.
 -- Memonic: the @s@ means plural, alluding to the monoidal property.
-newtype RWSsT r w s m a = RWSsT { runRWSsT :: RWST r w s m a }
+newtype RWSsT r w s m a = RWSsT { unRWSsT :: RWST r w s m a }
     deriving
     ( G.Generic
     , MonadTrans
@@ -52,24 +51,48 @@ newtype RWSsT r w s m a = RWSsT { runRWSsT :: RWST r w s m a }
 
 type RWSs r w s  = RWSsT r w s Identity
 
-pattern RWSsT' :: (r -> s -> m (a, s, w)) -> RWSsT r w s m a
-pattern RWSsT' f = RWSsT (RWST f)
+-- pattern RWSsT' :: (r -> s -> m (a, s, w)) -> RWSsT r w s m a
+-- pattern RWSsT' f = RWSsT (RWST f)
 
-#if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE RWSsT' #-}
-#endif
+-- #if __GLASGOW_HASKELL__ >= 802
+-- {-# COMPLETE RWSsT' #-}
+-- #endif
 
-rwssT' :: (r -> s -> m (a, s, w)) -> RWSsT r w s m a
-rwssT' = coerce
+rwssT :: (r -> s -> m (a, s, w)) -> RWSsT r w s m a
+rwssT = RWSsT . RWST
 
-rwss' :: (r -> s -> (a, s, w)) -> RWSs r w s a
-rwss' k = RWSsT (rws k)
+rwss :: (r -> s -> (a, s, w)) -> RWSs r w s a
+rwss = RWSsT . rws
 
-runRWSsT' :: RWSsT r w s m a -> r -> s -> m (a, s, w)
-runRWSsT' = coerce
+runRWSsT :: RWSsT r w s m a -> r -> s -> m (a, s, w)
+runRWSsT = runRWST . unRWSsT
 
-runRWSs' :: RWSs r w s a -> r -> s -> (a, s, w)
-runRWSs' (RWSsT m) = runRWS m
+runRWSs :: RWSs r w s a -> r -> s -> (a, s, w)
+runRWSs = runRWS . unRWSsT
+
+evalRWSsT :: Monad m => RWSsT r w s m a -> r -> s -> m (a, w)
+evalRWSsT = evalRWST . unRWSsT
+
+evalRWSs :: RWSs r w s a -> r -> s -> (a, w)
+evalRWSs = evalRWS . unRWSsT
+
+execRWSsT :: Monad m => RWSsT r w s m a -> r -> s -> m (s, w)
+execRWSsT = execRWST . unRWSsT
+
+execRWSs :: RWSs r w s a -> r -> s -> (s, w)
+execRWSs = execRWS . unRWSsT
+
+mapRWSsT :: (m (a, s, w) -> n (b, s, w')) -> RWSsT r w s m a -> RWSsT r w' s n b
+mapRWSsT f = RWSsT . mapRWST f . unRWSsT
+
+mapRWSs :: ((a, s, w) -> (b, s, w')) -> RWSs r w s a -> RWSs r w' s b
+mapRWSs f = RWSsT . mapRWS f . unRWSsT
+
+withRWSsT :: (r' -> s -> (r, s)) -> RWSsT r w s m a -> RWSsT r' w s m a
+withRWSsT f = RWSsT . withRWST f . unRWSsT
+
+withRWSs :: (r' -> s -> (r, s)) -> RWSs r w s a -> RWSs r' w s a
+withRWSs = withRWSsT
 
 instance Newtype (RWSsT r w s m a)
 

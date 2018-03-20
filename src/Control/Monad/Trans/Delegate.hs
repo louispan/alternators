@@ -9,9 +9,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-#if __GLASGOW_HASKELL__ < 802
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-#endif
+-- #if __GLASGOW_HASKELL__ < 802
+-- {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+-- #endif
 
 module Control.Monad.Trans.Delegate where
 
@@ -20,15 +20,15 @@ import Control.Monad.Cont
 import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State.Class
+import Control.Monad.Trans.Cont
 import Control.Monad.Zip
 import Control.Newtype
-import Data.Coerce
 import Data.Functor.Identity
 import Data.Semigroup
 import qualified GHC.Generics as G
 
 -- | A 'Delegate' is a @ContT () m a@ which allows for Monoid and Semigroup instances
-newtype DelegateT m a = DelegateT { runDelegateT :: ContT () m a }
+newtype DelegateT m a = DelegateT { unDelegateT :: ContT () m a }
     deriving
     ( G.Generic
     , MonadTrans
@@ -43,24 +43,39 @@ newtype DelegateT m a = DelegateT { runDelegateT :: ContT () m a }
 
 type Delegate = DelegateT Identity
 
-pattern DelegateT' :: ((a -> m ()) -> m ()) -> DelegateT m a
-pattern DelegateT' f = DelegateT (ContT f)
+-- pattern DelegateT' :: ((a -> m ()) -> m ()) -> DelegateT m a
+-- pattern DelegateT' f = DelegateT (ContT f)
 
-#if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE DelegateT' #-}
-#endif
+-- #if __GLASGOW_HASKELL__ >= 802
+-- {-# COMPLETE DelegateT' #-}
+-- #endif
 
-delegateT' :: ((a -> m ()) -> m ()) -> DelegateT m a
-delegateT' = coerce
+delegateT :: ((a -> m ()) -> m ()) -> DelegateT m a
+delegateT = DelegateT . ContT
 
-delegate' :: ((a -> ()) -> ()) -> Delegate a
-delegate' k = DelegateT (cont k)
+delegate :: ((a -> ()) -> ()) -> Delegate a
+delegate = DelegateT . cont
 
-runDelegateT' :: DelegateT m a -> (a -> m ()) -> m ()
-runDelegateT' = coerce
+runDelegateT :: DelegateT m a -> (a -> m ()) -> m ()
+runDelegateT = runContT . unDelegateT
 
-runDelegate' :: Delegate a -> (a -> ()) -> ()
-runDelegate' (DelegateT m) = runCont m
+runDelegate :: Delegate a -> (a -> ()) -> ()
+runDelegate = runCont . unDelegateT
+
+evalDelegateT :: Monad m => DelegateT m () -> m ()
+evalDelegateT = evalContT . unDelegateT
+
+evalDelegate :: Delegate () -> ()
+evalDelegate = evalCont . unDelegateT
+
+mapDelegateT :: (m () -> m ()) -> DelegateT m a -> DelegateT m a
+mapDelegateT f = DelegateT . mapContT f . unDelegateT
+
+withDelegateT :: ((b -> m ()) -> a -> m ()) -> DelegateT m a -> DelegateT m b
+withDelegateT f = DelegateT . withContT f . unDelegateT
+
+withDelegate :: ((b -> ()) -> a -> ()) -> Delegate a -> Delegate b
+withDelegate f = DelegateT . withCont f . unDelegateT
 
 instance Newtype (DelegateT m a)
 

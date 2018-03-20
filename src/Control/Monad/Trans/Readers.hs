@@ -8,9 +8,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-#if __GLASGOW_HASKELL__ < 802
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-#endif
+-- #if __GLASGOW_HASKELL__ < 802
+-- {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+-- #endif
 
 module Control.Monad.Trans.Readers where
 
@@ -26,13 +26,12 @@ import Control.Monad.State.Class
 import Control.Monad.Writer.Class
 import Control.Monad.Zip
 import Control.Newtype
-import Data.Coerce
 import Data.Semigroup
 import qualified GHC.Generics as G
 
 -- | A newtype wrapper around ReaderT for lifted monoid instances.
 -- Memonic: the @s@ means plural, alluding to the monoidal property.
-newtype ReadersT r m a = ReadersT { runReadersT :: ReaderT r m a }
+newtype ReadersT r m a = ReadersT { unReadersT :: ReaderT r m a }
     deriving
     ( G.Generic
     , MonadTrans
@@ -56,24 +55,42 @@ newtype ReadersT r m a = ReadersT { runReadersT :: ReaderT r m a }
 
 type Readers r  = ReadersT r Identity
 
-pattern ReadersT' :: (r -> m a) -> ReadersT r m a
-pattern ReadersT' f = ReadersT (ReaderT f)
+-- pattern ReadersT' :: (r -> m a) -> ReadersT r m a
+-- pattern ReadersT' f = ReadersT (ReaderT f)
 
-#if __GLASGOW_HASKELL__ >= 802
-{-# COMPLETE ReadersT' #-}
-#endif
+-- #if __GLASGOW_HASKELL__ >= 802
+-- {-# COMPLETE ReadersT' #-}
+-- #endif
 
-readersT' :: (r -> m a) -> ReadersT r m a
-readersT' = coerce
+readersT :: (r -> m a) -> ReadersT r m a
+readersT = ReadersT . ReaderT
 
-readers' :: (r -> a) -> Readers r a
-readers' k = ReadersT (reader k)
+readers :: (r -> a) -> Readers r a
+readers = ReadersT . reader
 
-runReadersT' :: ReadersT r m a -> r -> m a
-runReadersT' = coerce
+runReadersT :: ReadersT r m a -> r -> m a
+runReadersT = runReaderT . unReadersT
 
-runReaders' :: Readers r a -> r -> a
-runReaders' (ReadersT m) = runReader m
+runReaders :: Readers r a -> r -> a
+runReaders = runReader . unReadersT
+
+mapReadersT :: (m a -> n b) -> ReadersT r m a -> ReadersT r n b
+mapReadersT f = ReadersT . mapReaderT f . unReadersT
+
+mapReaders :: (a -> b) -> Readers r a -> Readers r b
+mapReaders f = ReadersT . mapReader f . unReadersT
+
+withReadersT ::
+    (r' -> r)        -- ^ The function to modify the environment.
+    -> ReadersT r m a    -- ^ Computation to run in the modified environment.
+    -> ReadersT r' m a
+withReadersT f = ReadersT . withReaderT f . unReadersT
+
+withReader ::
+    (r' -> r)        -- ^ The function to modify the environment.
+    -> Reader r a       -- ^ Computation to run in the modified environment.
+    -> Reader r' a
+withReader = withReaderT
 
 instance Newtype (ReadersT r m a)
 
