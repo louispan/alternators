@@ -25,6 +25,7 @@ library
                        Control.Monad.Trans.States.Strict
                        Control.Monad.Trans.Conts
                        Control.Monad.Trans.MCont
+                       Control.Monad.Trans.TMCont
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
                      , mtl >= 2

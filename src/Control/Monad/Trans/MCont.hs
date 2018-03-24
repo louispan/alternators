@@ -20,12 +20,17 @@ import Data.Functor.Identity
 import Data.Semigroup
 import qualified GHC.Generics as G
 
--- | A newtype wrapper around ContT for lifted monoid instances.
--- Memonic: the @s@ means plural, alluding to the monoidal property.
+-- | Continuations that threads the actions instead of the values.
 newtype MContT r m a = MContT { runMContT :: (m a -> m r) -> m r }
     deriving (G.Generic)
 
 type MCont r = MContT r Identity
+
+mContT' :: Monad m => ((a -> m r) -> m r) -> MContT r m a
+mContT' m = MContT $ \k -> m (\a -> k (pure a))
+
+runMContT' :: Monad m => MContT r m a -> (a -> m r) -> m r
+runMContT' (MContT m) k = m (\ma -> ma >>= k)
 
 mcont :: ((a -> r) -> r) -> MCont r a
 mcont f = MContT (\c -> Identity (f (runIdentity . c . pure)))
@@ -47,6 +52,10 @@ mapMCont f = mapMContT (Identity . f . runIdentity)
 
 withMContT :: ((m b -> m r) -> m a -> m r) -> MContT r m a -> MContT r m b
 withMContT f (MContT m) = MContT $ m . f
+
+withMContT' :: Monad m => ((b -> m r) -> a -> m r) -> MContT r m a -> MContT r m b
+withMContT' f (MContT m) = MContT $ \k -> m $ \ma ->
+    ma >>= f (\b -> k (pure b))
 
 withMCont :: ((b -> r) -> a -> r) -> MCont r a -> MCont r b
 withMCont f = withMContT (\mbr (Identity a) ->

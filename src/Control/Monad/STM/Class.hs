@@ -86,6 +86,3 @@ instance (Monoid w, MonadSTM m) => MonadSTM (Lazy.RWSsT r w s m) where
 
 instance (Monoid w, MonadSTM m) => MonadSTM (Strict.RWSsT r w s m) where
     liftSTM = lift . liftSTM
-
--- instance (MonadTrans t, MonadSTM m, Monad (t m)) => MonadSTM (t m) where
---     liftSTM = lift . liftSTM
