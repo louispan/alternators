@@ -32,8 +32,8 @@ mContT' m = MContT $ \k -> m (\a -> k (pure a))
 runMContT' :: Monad m => MContT r m a -> (a -> m r) -> m r
 runMContT' (MContT m) k = m (\ma -> ma >>= k)
 
-mcont :: ((a -> r) -> r) -> MCont r a
-mcont f = MContT (\c -> Identity (f (runIdentity . c . pure)))
+mCont :: ((a -> r) -> r) -> MCont r a
+mCont f = MContT (\c -> Identity (f (runIdentity . c . pure)))
 
 runMCont :: MCont r a -> (a -> r) -> r
 runMCont (MContT m) k = runIdentity (m (Identity . k . runIdentity))
