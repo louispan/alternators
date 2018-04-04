@@ -82,7 +82,7 @@ instance (MonadIO m) => MonadIO (MContT r m) where
     liftIO = lift . liftIO
 
 instance Monad m => MonadZip (MContT r m) where
-    mzip x y = liftA2 (,) x y
+    mzip = liftA2 (,)
 
 instance (MonadFail m) => MonadFail (MContT r m) where
     fail msg = MContT $ \ _ -> Control.Monad.Fail.fail msg

@@ -20,3 +20,10 @@ tmContT m = do
 -- | Variation of 'tmContT' that accepts a vanilla value type continuation.
 tmContT' :: MonadSTM m => ((a -> m ()) -> m ()) -> MContT r m a
 tmContT' m = tmContT (\k -> m (\a -> k (pure a)))
+
+tmContT :: ((m a -> m ()) -> m ()) -> MContT r m a
+tmContT m = do
+    v <- liftSTM newEmptyTMVar
+    lift $ m (\ma -> ma >>= liftSTM . putTMVar v)
+    MContT $ \k ->
+            (k (liftSTM $ takeTMVar v))

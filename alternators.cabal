@@ -16,16 +16,14 @@ tested-with:         GHC == 7.10.3, GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Control.Monad.STM.Class
-                       Control.Monad.Trans.Maybe.Extras
+  exposed-modules:     Control.Monad.Trans.Maybe.Extras
                        Control.Monad.Trans.Readers
                        Control.Monad.Trans.RWSs.Strict
                        Control.Monad.Trans.RWSs.Lazy
                        Control.Monad.Trans.States.Lazy
                        Control.Monad.Trans.States.Strict
                        Control.Monad.Trans.Conts
-                       Control.Monad.Trans.MCont
-                       Control.Monad.Trans.TMCont
+                       Control.Monad.Trans.Forker
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
                      , mtl >= 2
