@@ -16,8 +16,7 @@ tested-with:         GHC == 7.10.3, GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Control.Monad.Trans.Maybe.Extras
-                       Control.Monad.Trans.Readers
+  exposed-modules:     Control.Monad.Trans.Readers
                        Control.Monad.Trans.RWSs.Strict
                        Control.Monad.Trans.RWSs.Lazy
                        Control.Monad.Trans.States.Lazy
