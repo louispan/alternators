@@ -23,7 +23,7 @@ library
                        Control.Monad.Trans.States.Lazy
                        Control.Monad.Trans.States.Strict
                        Control.Monad.Trans.Conts
-                       Control.Monad.Trans.Concur
+                      --  Control.Monad.Trans.Concur
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
                      , mtl >= 2
