@@ -11,3 +11,4 @@ Handy functions when using transformers
   - Added `Delegate`, a specialization of `ContT () m r`
   - Removed `runReaderM` as it can be replaced with `lift`, `hoist` and `>>=`
     See [gist](https://gist.github.com/louispan/1c7792d45ebe5559ffc45aa9db461c35)
+  - Replace `fromMaybeT` with `evalMaybeT`.
