@@ -12,7 +12,7 @@
 -- {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 -- #endif
 
-module Control.Monad.Trans.Readers where
+module Control.Monad.Trans.AReader where
 
 import Control.Applicative
 import Control.Lens
@@ -30,8 +30,8 @@ import Data.Semigroup
 import qualified GHC.Generics as G
 
 -- | A newtype wrapper around ReaderT for lifted monoid instances.
--- Memonic: the @s@ means plural, alluding to the monoidal property.
-newtype ReadersT r m a = ReadersT { unReadersT :: ReaderT r m a }
+-- Memonic: @A@ for alternative AReaderT which can be merged into "a" single AReaderT
+newtype AReaderT r m a = AReaderT { unAReaderT :: ReaderT r m a }
     deriving
     ( G.Generic
     , MonadTrans
@@ -53,68 +53,68 @@ newtype ReadersT r m a = ReadersT { unReadersT :: ReaderT r m a }
     , MMonad
     )
 
-type Readers r  = ReadersT r Identity
+type AReader r  = AReaderT r Identity
 
--- pattern ReadersT' :: (r -> m a) -> ReadersT r m a
--- pattern ReadersT' f = ReadersT (ReaderT f)
+-- pattern AReaderT' :: (r -> m a) -> AReaderT r m a
+-- pattern AReaderT' f = AReaderT (ReaderT f)
 
 -- #if __GLASGOW_HASKELL__ >= 802
--- {-# COMPLETE ReadersT' #-}
+-- {-# COMPLETE AReaderT' #-}
 -- #endif
 
-readersT :: (r -> m a) -> ReadersT r m a
-readersT = ReadersT . ReaderT
+areaderT :: (r -> m a) -> AReaderT r m a
+areaderT = AReaderT . ReaderT
 
-readers :: (r -> a) -> Readers r a
-readers = ReadersT . reader
+areader :: (r -> a) -> AReader r a
+areader = AReaderT . reader
 
-runReadersT :: ReadersT r m a -> r -> m a
-runReadersT = runReaderT . unReadersT
+runAReaderT :: AReaderT r m a -> r -> m a
+runAReaderT = runReaderT . unAReaderT
 
-runReaders :: Readers r a -> r -> a
-runReaders = runReader . unReadersT
+runAReader :: AReader r a -> r -> a
+runAReader = runReader . unAReaderT
 
-mapReadersT :: (m a -> n b) -> ReadersT r m a -> ReadersT r n b
-mapReadersT f = ReadersT . mapReaderT f . unReadersT
+mapAReaderT :: (m a -> n b) -> AReaderT r m a -> AReaderT r n b
+mapAReaderT f = AReaderT . mapReaderT f . unAReaderT
 
-mapReaders :: (a -> b) -> Readers r a -> Readers r b
-mapReaders f = ReadersT . mapReader f . unReadersT
+mapAReader :: (a -> b) -> AReader r a -> AReader r b
+mapAReader f = AReaderT . mapReader f . unAReaderT
 
-withReadersT ::
+withAReaderT ::
     (r' -> r)        -- ^ The function to modify the environment.
-    -> ReadersT r m a    -- ^ Computation to run in the modified environment.
-    -> ReadersT r' m a
-withReadersT f = ReadersT . withReaderT f . unReadersT
+    -> AReaderT r m a    -- ^ Computation to run in the modified environment.
+    -> AReaderT r' m a
+withAReaderT f = AReaderT . withReaderT f . unAReaderT
 
-withReader ::
+withAReader ::
     (r' -> r)        -- ^ The function to modify the environment.
-    -> Reader r a       -- ^ Computation to run in the modified environment.
-    -> Reader r' a
-withReader = withReaderT
+    -> AReader r a       -- ^ Computation to run in the modified environment.
+    -> AReader r' a
+withAReader = withAReaderT
 
-instance Newtype (ReadersT r m a)
+instance Newtype (AReaderT r m a)
 
-type instance Magnified (ReadersT r m) = Magnified (ReaderT r m)
-instance Monad m => Magnify (ReadersT s m) (ReadersT t m) s t where
-    magnify l (ReadersT f) = ReadersT (magnify l f)
+type instance Magnified (AReaderT r m) = Magnified (ReaderT r m)
+instance Monad m => Magnify (AReaderT s m) (AReaderT t m) s t where
+    magnify l (AReaderT f) = AReaderT (magnify l f)
 
-type instance Zoomed (ReadersT e m) = Zoomed (ReaderT e m)
-instance Zoom m n s t => Zoom (ReadersT e m) (ReadersT e n) s t where
-    zoom l (ReadersT f) = ReadersT (zoom l f)
+type instance Zoomed (AReaderT e m) = Zoomed (ReaderT e m)
+instance Zoom m n s t => Zoom (AReaderT e m) (AReaderT e n) s t where
+    zoom l (AReaderT f) = AReaderT (zoom l f)
 
 -- | This is the reason for the newtye wrapper
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instance runs both.
 -- This Semigroup instance is the same as @(->) r@
-instance (Semigroup a, Monad m) => Semigroup (ReadersT r m a) where
-    (ReadersT f) <> (ReadersT g) = ReadersT (liftA2 (<>) f g)
+instance (Semigroup a, Monad m) => Semigroup (AReaderT r m a) where
+    (AReaderT f) <> (AReaderT g) = AReaderT (liftA2 (<>) f g)
 
 -- | This is the reason for the newtye wrapper
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instances runs both.
 -- This Monoid instance is the same as @(->) r@
-instance (Monoid a, Monad m) => Monoid (ReadersT r m a) where
-    mempty = ReadersT (pure mempty)
-    (ReadersT f) `mappend` (ReadersT g) = ReadersT (liftA2 mappend f g)
+instance (Monoid a, Monad m) => Monoid (AReaderT r m a) where
+    mempty = AReaderT (pure mempty)
+    (AReaderT f) `mappend` (AReaderT g) = AReaderT (liftA2 mappend f g)
