@@ -16,7 +16,10 @@ tested-with:         GHC == 7.10.3, GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Control.Monad.Trans.Maybe.Extras
+  exposed-modules:
+                       Control.Monad.Delegate
+                       Control.Monad.Delegate.Class
+                       Control.Monad.Trans.Maybe.Extras
                        Control.Monad.Trans.AReader
                        Control.Monad.Trans.ARWS.Strict
                        Control.Monad.Trans.ARWS.Lazy
