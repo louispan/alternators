@@ -27,16 +27,13 @@ import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
 import Data.Functor.Identity
 
-class Monad n => MonadDelegate r n | n -> r where
-    delegate :: ((a -> r) -> r) -> n a
+class Monad m => MonadDelegate r m | m -> r where
+    delegate :: ((a -> r) -> r) -> m a
 
-type MonadDelegate' r n = MonadDelegate (Identity r) n
+type MonadDelegate' r m = MonadDelegate (Identity r) m
 
-delegate' :: MonadDelegate (Identity r) n => ((a -> r) -> r) -> n a
+delegate' :: MonadDelegate (Identity r) m => ((a -> r) -> r) -> m a
 delegate' k = delegate (Identity . k . (runIdentity .))
-
-instance (MonadDelegate r n) => MonadDelegate r (IdentityT n) where
-    delegate = lift . delegate
 
 instance MonadDelegate (m r) (ContT r m) where
     delegate = ContT
@@ -44,44 +41,47 @@ instance MonadDelegate (m r) (ContT r m) where
 instance MonadDelegate (m r) (AContT r m) where
     delegate = acontT
 
-instance (MonadDelegate r n) => MonadDelegate r (ExceptT e n) where
+instance (MonadDelegate r m) => MonadDelegate r (IdentityT m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (MaybeT n) where
+instance (MonadDelegate r m) => MonadDelegate r (ExceptT e m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (ReaderT env n) where
+instance (MonadDelegate r m) => MonadDelegate r (MaybeT m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (AReaderT env n) where
+instance (MonadDelegate r m) => MonadDelegate r (ReaderT env m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (Lazy.StateT s n) where
+instance (MonadDelegate r m) => MonadDelegate r (AReaderT env m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (Strict.StateT s n) where
+instance (MonadDelegate r m) => MonadDelegate r (Lazy.StateT s m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (Lazy.AStateT s n) where
+instance (MonadDelegate r m) => MonadDelegate r (Strict.StateT s m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n) => MonadDelegate r (Strict.AStateT s n) where
+instance (MonadDelegate r m) => MonadDelegate r (Lazy.AStateT s m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n, Monoid w) => MonadDelegate r (Lazy.WriterT w n) where
+instance (MonadDelegate r m) => MonadDelegate r (Strict.AStateT s m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n, Monoid w) => MonadDelegate r (Strict.WriterT w n) where
+instance (MonadDelegate r m, Monoid w) => MonadDelegate r (Lazy.WriterT w m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n, Monoid w) => MonadDelegate r (Lazy.RWST r w s n) where
+instance (MonadDelegate r m, Monoid w) => MonadDelegate r (Strict.WriterT w m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n, Monoid w) => MonadDelegate r (Strict.RWST r w s n) where
+instance (MonadDelegate r m, Monoid w) => MonadDelegate r (Lazy.RWST r w s m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n, Monoid w) => MonadDelegate r (Lazy.ARWST r w s n) where
+instance (MonadDelegate r m, Monoid w) => MonadDelegate r (Strict.RWST r w s m) where
     delegate = lift . delegate
 
-instance (MonadDelegate r n, Monoid w) => MonadDelegate r (Strict.ARWST r w s n) where
+instance (MonadDelegate r m, Monoid w) => MonadDelegate r (Lazy.ARWST r w s m) where
+    delegate = lift . delegate
+
+instance (MonadDelegate r m, Monoid w) => MonadDelegate r (Strict.ARWST r w s m) where
     delegate = lift . delegate
