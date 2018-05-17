@@ -1,6 +1,8 @@
-module Control.Monad.Defer (
-    -- * MonadDefer class
-    MonadDefer(..),
+module Control.Monad.Devolve (
+    -- * MonadDevolve class
+    MonadDevolve(..),
+    MonadDevolve',
+    devolve',
 
     -- * The ContT monad
     module Control.Monad,
@@ -9,7 +11,7 @@ module Control.Monad.Defer (
     module Control.Monad.Trans,
     ) where
 
-import Control.Monad.Defer.Class
+import Control.Monad.Devolve.Class
 
 import Control.Monad
 import Control.Monad.Trans

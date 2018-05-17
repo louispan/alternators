@@ -1,8 +1,6 @@
 module Control.Monad.Delegate (
     -- * MonadDelegate class
     MonadDelegate(..),
-    MonadDelegate',
-    delegate',
 
     -- * The ContT monad
     module Control.Monad,

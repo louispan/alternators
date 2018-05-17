@@ -17,8 +17,6 @@ tested-with:         GHC == 7.10.3, GHC == 8.0.1
 library
   hs-source-dirs:      src
   exposed-modules:
-                       Control.Monad.Defer
-                       Control.Monad.Defer.Class
                        Control.Monad.Delegate
                        Control.Monad.Delegate.Class
                        Control.Monad.Trans.Maybe.Extras

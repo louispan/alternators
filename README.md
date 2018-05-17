@@ -10,5 +10,5 @@ Handy functions when using transformers
     See [gist](https://gist.github.com/louispan/1c7792d45ebe5559ffc45aa9db461c35)
   - Replace `fromMaybeT` with `evalMaybeT`.
   - Added `AReaderT`, `AStateT`, `AContT`, `ARWS` newtype wrappers with `Monoid` instances.
-  - Added `MonadDelegate` for accessing the continuation in `ContT` transformer stacks.
-  - Added `MonadDefer` for a more accessing a continuation in the same monad. This is more handy but has fewer instances.
+  - Added `MonadDevolve` for accessing the continuation in `ContT` transformer stacks.
+  - Added `MonadDelegate` for a more accessing a continuation in the same monad. This is more handy but has fewer instances.
