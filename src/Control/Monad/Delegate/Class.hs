@@ -12,7 +12,9 @@ import Control.Monad.Trans.AReader
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Identity
+-- import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
+-- import Data.Maybe
 
 class Monad m => MonadDelegate r m | m -> r where
     delegate :: ((a -> m r) -> m r) -> m a
@@ -31,3 +33,7 @@ instance (MonadDelegate r m) => MonadDelegate r (ReaderT env m) where
 
 instance (MonadDelegate r m) => MonadDelegate r (AReaderT env m) where
     delegate f = areaderT $ \r -> delegate $ \k -> (`runAReaderT` r) $ f (lift . k)
+
+-- instance (Monoid r, MonadDelegate r m) => MonadDelegate r (MaybeT m) where
+--     delegate f = MaybeT . fmap Just . delegate $ \k ->
+--         fmap (fromMaybe mempty) . runMaybeT . f $ lift . k
