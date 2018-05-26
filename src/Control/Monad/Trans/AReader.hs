@@ -107,14 +107,14 @@ instance Zoom m n s t => Zoom (AReaderT e m) (AReaderT e n) s t where
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instance runs both.
 -- This Semigroup instance is the same as @(->) r@
-instance (Semigroup a, Monad m) => Semigroup (AReaderT r m a) where
-    (AReaderT f) <> (AReaderT g) = AReaderT (liftA2 (<>) f g)
+instance (Semigroup (m a)) => Semigroup (AReaderT r m a) where
+    (AReaderT (ReaderT f)) <> (AReaderT (ReaderT g)) = AReaderT (ReaderT (liftA2 (<>) f g))
 
 -- | This is the reason for the newtye wrapper
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instances runs both.
 -- This Monoid instance is the same as @(->) r@
-instance (Monoid a, Monad m) => Monoid (AReaderT r m a) where
-    mempty = AReaderT (pure mempty)
-    (AReaderT f) `mappend` (AReaderT g) = AReaderT (liftA2 mappend f g)
+instance (Monoid (m a)) => Monoid (AReaderT r m a) where
+    mempty = AReaderT (ReaderT (pure mempty))
+    (AReaderT (ReaderT f)) `mappend` (AReaderT (ReaderT g)) = AReaderT (ReaderT (liftA2 mappend f g))

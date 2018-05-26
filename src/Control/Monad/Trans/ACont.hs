@@ -102,7 +102,8 @@ instance (Monoid r, Applicative m) => Monoid (AContT r m a) where
     AContT (ContT f) `mappend` AContT (ContT g) =
         AContT . ContT $ \k -> liftA2 mappend (f k) (g k)
 
--- | ContT didn't have an instance of Alternative1
+-- | This is the reason for the newtye wrapper
+-- ContT didn't have an instance of Alternative
 instance Alternative m => Alternative (AContT r m) where
     empty = AContT $ ContT $ const empty
     AContT (ContT f) <|> AContT (ContT g) =

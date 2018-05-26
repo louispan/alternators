@@ -57,7 +57,7 @@ newtype AStateT s m a = AStateT { unAStateT :: StateT s m a }
 -- {-# COMPLETE AStateT' #-}
 -- #endif
 
-type AState s  = AStateT s Identity
+type AState s = AStateT s Identity
 
 astateT :: (s -> m (a, s)) -> AStateT s m a
 astateT = AStateT . StateT
@@ -101,19 +101,13 @@ type instance Zoomed (AStateT s m) = Zoomed (StateT s m)
 instance (Monad m) => Zoom (AStateT s m) (AStateT t m) s t where
     zoom l (AStateT f) = AStateT (zoom l f)
 
--- | This is the reason for the newtye wrapper
--- This is different from the Alternative/MonadPlus instance.
--- The Alternative/MonadPlus instance runs one or the other
--- The Semigroup/Monoid instance runs both.
--- This Semigroup instance is the same as @(->) r@
+-- | This is the reason for the newtye wrapper.
+-- Run both states, and (<>) the results.
 instance (Semigroup a, Monad m) => Semigroup (AStateT s m a) where
     (AStateT f) <> (AStateT g) = AStateT (liftA2 (<>) f g)
 
--- | This is the reason for the newtye wrapper
--- This is different from the Alternative/MonadPlus instance.
--- The Alternative/MonadPlus instance runs one or the other
--- The Semigroup/Monoid instances runs both.
--- This Monoid instance is the same as @(->) r@
+-- | This is the reason for the newtye wrapper.
+-- Run both states, and (`mappend`) the results.
 instance (Monoid a, Monad m) => Monoid (AStateT s m a) where
     mempty = AStateT (pure mempty)
     (AStateT f) `mappend` (AStateT g) = AStateT (liftA2 mappend f g)
