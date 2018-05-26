@@ -37,3 +37,7 @@ instance (MonadDelegate r m) => MonadDelegate r (AReaderT env m) where
 instance (Monoid r, MonadDelegate r m) => MonadDelegate r (MaybeT m) where
     delegate f = MaybeT . fmap Just . delegate $ \k ->
         fmap (fromMaybe mempty) . runMaybeT . f $ lift . k
+
+-- | Only handle with given monad.
+static :: MonadDelegate r m => m r -> m a
+static = delegate . const
