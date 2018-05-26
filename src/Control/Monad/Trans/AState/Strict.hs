@@ -103,11 +103,19 @@ instance (Monad m) => Zoom (AStateT s m) (AStateT t m) s t where
 
 -- | This is the reason for the newtye wrapper.
 -- Run both states, and (<>) the results.
-instance (Semigroup a, Monad m) => Semigroup (AStateT s m a) where
-    (AStateT f) <> (AStateT g) = AStateT (liftA2 (<>) f g)
+instance (Semigroup (m a), Monad m) => Semigroup (AStateT s m a) where
+    (AStateT (StateT f)) <> (AStateT (StateT g)) =
+        AStateT . StateT $ \s -> do
+            (a1, s1) <- f s
+            (a2, s2) <- g s1
+            (\a3 -> (a3, s2)) <$> ((pure a1) <> (pure a2))
 
 -- | This is the reason for the newtye wrapper.
 -- Run both states, and (`mappend`) the results.
-instance (Monoid a, Monad m) => Monoid (AStateT s m a) where
-    mempty = AStateT (pure mempty)
-    (AStateT f) `mappend` (AStateT g) = AStateT (liftA2 mappend f g)
+instance (Monoid (m a), Monad m) => Monoid (AStateT s m a) where
+    mempty = AStateT . StateT $ \s -> (\a -> (a, s)) <$> mempty
+    (AStateT (StateT f)) `mappend` (AStateT (StateT g)) =
+        AStateT . StateT $ \s -> do
+            (a1, s1) <- f s
+            (a2, s2) <- g s1
+            (\a3 -> (a3, s2)) <$> ((pure a1) `mappend` (pure a2))

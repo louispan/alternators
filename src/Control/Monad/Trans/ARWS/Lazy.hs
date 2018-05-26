@@ -105,18 +105,16 @@ instance (Monad m, Monoid w) => Zoom (ARWST r w s m) (ARWST r w t m) s t where
     zoom l (ARWST f) = ARWST (zoom l f)
 
 -- | This is the reason for the newtye wrapper
--- This is different from the Alternative/MonadPlus instance.
--- The Alternative/MonadPlus instance runs one or the other
--- The Semigroup/Monoid instance runs both.
--- This Semigroup instance is the same as @(->) r@
-instance (Monad m, Semigroup a, Monoid w) => Semigroup (ARWST r w s m a) where
-    (ARWST f) <> (ARWST g) = ARWST (liftA2 (<>) f g)
+instance (Monad m, Semigroup (m a), Semigroup w) => Semigroup (ARWST r w s m a) where
+    (ARWST (RWST f)) <> (ARWST (RWST g)) = ARWST . RWST $ \r s -> do
+        (a1, s1, w1) <- f r s
+        (a2, s2, w2) <- g r s1
+        (\a3 -> (a3, s2, w1 <> w2)) <$> ((pure a1) <> (pure a2))
 
 -- | This is the reason for the newtye wrapper
--- This is different from the Alternative/MonadPlus instance.
--- The Alternative/MonadPlus instance runs one or the other
--- The Semigroup/Monoid instances runs both.
--- This Monoid instance is the same as @(->) r@
-instance (Monad m, Monoid a, Monoid w) => Monoid (ARWST r w s m a) where
-    mempty = ARWST (pure mempty)
-    (ARWST f) `mappend` (ARWST g) = ARWST (liftA2 mappend f g)
+instance (Monad m, Monoid (m a), Monoid w) => Monoid (ARWST r w s m a) where
+    mempty = ARWST . RWST $ \_ s -> (\a -> (a, s, mempty)) <$> mempty
+    (ARWST (RWST f)) `mappend` (ARWST (RWST g)) = ARWST . RWST $ \r s -> do
+        (a1, s1, w1) <- f r s
+        (a2, s2, w2) <- g r s1
+        (\a3 -> (a3, s2, w1 `mappend` w2)) <$> ((pure a1) `mappend` (pure a2))
