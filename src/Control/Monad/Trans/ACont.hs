@@ -89,18 +89,18 @@ instance MonadZip (AContT r m) where
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instances runs both, and fires the output twice.
-instance (Semigroup r, Applicative m) => Semigroup (AContT r m c) where
+instance (Semigroup (m r)) => Semigroup (AContT r m c) where
     AContT (ContT f) <> AContT (ContT g) =
-        AContT . ContT $ \k -> liftA2 (<>) (f k) (g k)
+        AContT . ContT $ \k -> (f k) <> (g k)
 
 -- | This is the reason for the newtye wrapper
 -- This is different from the Alternative/MonadPlus instance.
 -- The Alternative/MonadPlus instance runs one or the other
 -- The Semigroup/Monoid instances runs both, and fires the output twice.
-instance (Monoid r, Applicative m) => Monoid (AContT r m a) where
-    mempty = AContT . ContT . const $ pure mempty
+instance (Monoid (m r)) => Monoid (AContT r m a) where
+    mempty = AContT . ContT . const $ mempty
     AContT (ContT f) `mappend` AContT (ContT g) =
-        AContT . ContT $ \k -> liftA2 mappend (f k) (g k)
+        AContT . ContT $ \k -> (f k) `mappend` (g k)
 
 -- | This is the reason for the newtye wrapper
 -- ContT didn't have an instance of Alternative
