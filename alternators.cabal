@@ -1,5 +1,5 @@
 name:                alternators
-version:             0.2.0.0
+version:             1.0.0.0
 synopsis:            Handy functions when using transformers
 description:         Please see README.md
 homepage:            https://github.com/louispan/alternators#readme
@@ -19,13 +19,14 @@ library
   exposed-modules:
                        Control.Monad.Delegate
                        Control.Monad.Delegate.Class
-                       Control.Monad.Trans.Maybe.Extras
+                       Control.Monad.Trans.ACont
+                      --  Control.Monad.Trans.AMaybe
                        Control.Monad.Trans.AReader
                        Control.Monad.Trans.ARWS.Strict
                        Control.Monad.Trans.ARWS.Lazy
                        Control.Monad.Trans.AState.Lazy
                        Control.Monad.Trans.AState.Strict
-                       Control.Monad.Trans.ACont
+                       Control.Monad.Trans.Maybe.Extras
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
                      , mtl >= 2

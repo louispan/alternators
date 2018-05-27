@@ -53,7 +53,7 @@ newtype AReaderT r m a = AReaderT { unAReaderT :: ReaderT r m a }
     , MMonad
     )
 
-type AReader r  = AReaderT r Identity
+type AReader r = AReaderT r Identity
 
 -- pattern AReaderT' :: (r -> m a) -> AReaderT r m a
 -- pattern AReaderT' f = AReaderT (ReaderT f)
