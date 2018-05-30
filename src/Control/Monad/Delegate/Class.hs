@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Control.Monad.Delegate.Class where
@@ -39,5 +40,9 @@ instance (Monoid r, MonadDelegate r m) => MonadDelegate r (MaybeT m) where
         fmap (fromMaybe mempty) . runMaybeT . f $ lift . k
 
 -- | Only handle with given monad.
-static :: MonadDelegate r m => m r -> m a
-static = delegate . const
+finish :: forall a r m. MonadDelegate r m => m r -> m a
+finish = delegate . const
+
+-- | Swich the focus/result/event of MonadDelegate that fires two events.
+retask :: MonadDelegate r m => ((b -> m r) -> m a) -> (a -> m r) -> m b
+retask f ka = delegate $ \kb -> f kb >>= ka
