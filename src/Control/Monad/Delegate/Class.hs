@@ -58,11 +58,14 @@ finish = delegate . const
 -- recombine :: MonadDelegate r m => m (Either a b) -> (a -> m r) -> m b
 -- recombine m fa = delegate $ \fb -> m >>= either fa fb
 
+-- | Convert two handler to a monad that may fire two possibilities
+-- | The inverse is 'bind2'.
 multitask :: MonadDelegate r m => ((a -> m r) -> (b -> m r) -> m r) -> m (Either a b)
 multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
 
--- recombine2 :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
--- recombine2 m fa fb = m >>= either fa fb
+-- | Convert a monad that fires two possibilites to a two handlers.
+bind2 :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
+bind2 m fa fb = m >>= either fa fb
 
--- combine2 :: MonadDelegate r m => ((a -> m r) -> m (Which xs)) -> m (Which (AppendUnique a xs))
+-- combine2 :: MonadDelegate r m => ((a -> m Sr) -> m (Which xs)) -> m (Which (AppendUnique a xs))
 -- combine2 g = delegate $ \fab -> g (fab . Left) >>= (fab . Right)
