@@ -18,6 +18,11 @@ import Control.Monad.Trans.Reader
 import Data.Maybe
 
 class Monad m => MonadDelegate r m | m -> r where
+    -- | The inverse of 'delegate' is 'bind'
+    --
+    -- @
+    -- (>>=) :: Monad m => m a -> (a -> m r) -> m r
+    -- @
     delegate :: ((a -> m r) -> m r) -> m a
 
 instance Monad m => MonadDelegate r (ContT r m) where
@@ -39,10 +44,25 @@ instance (Monoid r, MonadDelegate r m) => MonadDelegate r (MaybeT m) where
     delegate f = MaybeT . fmap Just . delegate $ \k ->
         fmap (fromMaybe mempty) . runMaybeT . f $ lift . k
 
--- | Only handle with given monad.
+-- | Only handle with given monad, and ignore anything else.
 finish :: forall a r m. MonadDelegate r m => m r -> m a
 finish = delegate . const
 
--- | Swich the focus/result/event of MonadDelegate that fires two events.
-retask :: MonadDelegate r m => ((b -> m r) -> m a) -> (a -> m r) -> m b
-retask f ka = delegate $ \kb -> f kb >>= ka
+-- -- | Swich the focus/result/event of MonadDelegate that fires two events.
+-- retask :: MonadDelegate r m => ((b -> m r) -> m a) -> (a -> m r) -> m b
+-- retask f ka = delegate $ \kb -> f kb >>= ka
+
+-- combine :: MonadDelegate r m => ((a -> m r) -> m b) -> m (Either a b)
+-- combine g = delegate $ \fab -> g (fab . Left) >>= (fab . Right)
+
+-- recombine :: MonadDelegate r m => m (Either a b) -> (a -> m r) -> m b
+-- recombine m fa = delegate $ \fb -> m >>= either fa fb
+
+multitask :: MonadDelegate r m => ((a -> m r) -> (b -> m r) -> m r) -> m (Either a b)
+multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
+
+-- recombine2 :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
+-- recombine2 m fa fb = m >>= either fa fb
+
+-- combine2 :: MonadDelegate r m => ((a -> m r) -> m (Which xs)) -> m (Which (AppendUnique a xs))
+-- combine2 g = delegate $ \fab -> g (fab . Left) >>= (fab . Right)
