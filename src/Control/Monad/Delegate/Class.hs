@@ -45,6 +45,7 @@ instance (Monoid r, MonadDelegate r m) => MonadDelegate r (MaybeT m) where
         fmap (fromMaybe mempty) . runMaybeT . f $ lift . k
 
 -- | Only handle with given monad, and ignore anything else.
+-- @forall@ so @TypeApplications@ can be used to specify the type of @a@
 finish :: forall a r m. MonadDelegate r m => m r -> m a
 finish = delegate . const
 
