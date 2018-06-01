@@ -45,19 +45,10 @@ instance (Monoid r, MonadDelegate r m) => MonadDelegate r (MaybeT m) where
         fmap (fromMaybe mempty) . runMaybeT . f $ lift . k
 
 -- | Only handle with given monad, and ignore anything else.
+-- This means subseqent fmap, aps, binds are always ignored.
 -- @forall@ so @TypeApplications@ can be used to specify the type of @a@
 finish :: forall a r m. MonadDelegate r m => m r -> m a
 finish = delegate . const
-
--- -- | Swich the focus/result/event of MonadDelegate that fires two events.
--- retask :: MonadDelegate r m => ((b -> m r) -> m a) -> (a -> m r) -> m b
--- retask f ka = delegate $ \kb -> f kb >>= ka
-
--- combine :: MonadDelegate r m => ((a -> m r) -> m b) -> m (Either a b)
--- combine g = delegate $ \fab -> g (fab . Left) >>= (fab . Right)
-
--- recombine :: MonadDelegate r m => m (Either a b) -> (a -> m r) -> m b
--- recombine m fa = delegate $ \fb -> m >>= either fa fb
 
 -- | Convert two handler to a monad that may fire two possibilities
 -- | The inverse is 'bind2'.
@@ -68,5 +59,10 @@ multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
 bind2 :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
 bind2 m fa fb = m >>= either fa fb
 
--- combine2 :: MonadDelegate r m => ((a -> m Sr) -> m (Which xs)) -> m (Which (AppendUnique a xs))
--- combine2 g = delegate $ \fab -> g (fab . Left) >>= (fab . Right)
+-- | 'bind' only the 'Right' possibility.
+bindRight :: Monad m => m (Either a b) -> (b -> m c) -> m (Either a c)
+bindRight m k = bind2 m (pure . Left) (fmap Right . k)
+
+-- | 'bind' only the 'Left' possibility.
+bindLeft :: Monad m => m (Either a b) -> (a -> m c) -> m (Either c b)
+bindLeft m k = bind2 m (fmap Left . k) (pure . Right)
