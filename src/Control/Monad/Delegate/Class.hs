@@ -66,3 +66,11 @@ bindRight m k = bind2 m (pure . Left) (fmap Right . k)
 -- | 'bind' only the 'Left' possibility.
 bindLeft :: Monad m => m (Either a b) -> (a -> m c) -> m (Either c b)
 bindLeft m k = bind2 m (fmap Left . k) (pure . Right)
+
+-- | finish the 'Left' possibility
+finishLeft :: MonadDelegate r m => m (Either r b) -> m b
+finishLeft m = m >>= either (finish . pure) pure
+
+-- | finish the 'Right' possibility
+finishRight :: MonadDelegate r m => m (Either a r) -> m a
+finishRight m = m >>= either pure (finish . pure)
