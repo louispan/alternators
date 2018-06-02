@@ -90,10 +90,24 @@ instance Zoom m n s t => Zoom (AMaybeT m) (AMaybeT n) s t where
     zoom l (AMaybeT f) = AMaybeT (zoom l f)
 
 -- | This is the reason for the newtye wrapper
-instance (Semigroup (m (Maybe a))) => Semigroup (AMaybeT m a) where
-    (AMaybeT (MaybeT f)) <> (AMaybeT (MaybeT g)) = AMaybeT . MaybeT $ f <> g
+-- Unlike the Monad instance, the Semigroup instance always run both args.
+instance (Monad m, Semigroup (m a)) => Semigroup (AMaybeT m a) where
+    (AMaybeT (MaybeT f)) <> (AMaybeT (MaybeT g)) = AMaybeT . MaybeT $ do
+        -- run both
+        (a, b) <- liftA2 (,) f g
+        case (a, b) of
+            (Nothing, b') -> pure b'
+            (a', Nothing) -> pure a'
+            (Just a', Just b') -> Just <$> ((pure a') <> (pure b'))
 
 -- | This is the reason for the newtye wrapper
-instance (Monoid (m (Maybe a))) => Monoid (AMaybeT m a) where
-    mempty = AMaybeT (MaybeT mempty)
-    (AMaybeT (MaybeT f)) `mappend` (AMaybeT (MaybeT g)) = AMaybeT . MaybeT $ f `mappend` g
+-- Unlike the Monad instance, the Monoid instance always run both args.
+instance (Monad m, Monoid (m a)) => Monoid (AMaybeT m a) where
+    mempty = AMaybeT . MaybeT $ Just <$> mempty
+    (AMaybeT (MaybeT f)) `mappend` (AMaybeT (MaybeT g)) = AMaybeT . MaybeT $ do
+        -- run both
+        (a, b) <- liftA2 (,) f g
+        case (a, b) of
+            (Nothing, b') -> pure b'
+            (a', Nothing) -> pure a'
+            (Just a', Just b') -> Just <$> ((pure a') `mappend` (pure b'))
