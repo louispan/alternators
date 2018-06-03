@@ -20,6 +20,7 @@ library
                        Control.Monad.Delegate
                        Control.Monad.Delegate.Class
                        Control.Monad.Trans.ACont
+                       Control.Monad.Trans.AExcept
                        Control.Monad.Trans.AMaybe
                        Control.Monad.Trans.AReader
                        Control.Monad.Trans.ARWS.Strict

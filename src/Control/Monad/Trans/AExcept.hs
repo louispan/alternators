@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -14,27 +15,28 @@
 -- {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 -- #endif
 
-module Control.Monad.Trans.AMaybe where
+module Control.Monad.Trans.AExcept where
 
 import Control.Applicative
 import Control.Lens
 import Control.Monad.Cont.Class
 import Control.Monad.Error.Class
+import Control.Monad.Except
 import Control.Monad.Fail
-import Control.Monad.Fix
 import Control.Monad.Morph
 import Control.Monad.Reader
 import Control.Monad.RWS.Class
 import Control.Monad.Trans.Maybe
+import Control.Monad.Writer.Class
 import Control.Monad.Zip
 import Control.Newtype
 import Data.Functor.Classes
 import Data.Semigroup
 import qualified GHC.Generics as G
 
--- | A newtype wrapper around MaybeT for lifted monoid instances.
--- Memonic: @A@ for alternative MaybeT which can be merged into "a" single MaybeT
-newtype AMaybeT m a = AMaybeT { unAMaybeT :: MaybeT m a }
+-- | A newtype wrapper around ExceptT for lifted monoid instances.
+-- Memonic: @A@ for alternative ExceptT which can be merged into "a" single MaybeT
+newtype AExceptT e m a = AExceptT { unAExceptT :: ExceptT e m a }
     deriving
     ( G.Generic
     , MonadTrans
@@ -74,41 +76,35 @@ newtype AMaybeT m a = AMaybeT { unAMaybeT :: MaybeT m a }
 -- {-# COMPLETE AMaybeT' #-}
 -- #endif
 
-amaybeT :: m (Maybe a) -> AMaybeT m a
-amaybeT = AMaybeT . MaybeT
+aexceptT :: m (Either e a) -> AExceptT e m a
+aexceptT = AExceptT . ExceptT
 
-runAMaybeT :: AMaybeT m a -> m (Maybe a)
-runAMaybeT = runMaybeT . unAMaybeT
+runAExceptT :: AExceptT e m a -> m (Either e a)
+runAExceptT = runExceptT . unAExceptT
 
-mapAMaybeT :: (m (Maybe a) -> n (Maybe b)) -> AMaybeT m a -> AMaybeT n b
-mapAMaybeT f = AMaybeT . mapMaybeT f . unAMaybeT
+mapAExceptT :: (m (Either e a) -> n (Either e' b)) -> AExceptT e m a -> AExceptT e' n b
+mapAExceptT f = AExceptT . mapExceptT f . unAExceptT
 
+withAExceptT :: Functor m => (e -> e') -> AExceptT e m a -> AExceptT e' m a
+withAExceptT f (AExceptT m) = AExceptT $ withExceptT f m
 
-instance Newtype (AMaybeT m a)
+instance Newtype (AExceptT e m a)
 
-type instance Zoomed (AMaybeT m) = Zoomed (MaybeT m)
-instance Zoom m n s t => Zoom (AMaybeT m) (AMaybeT n) s t where
-    zoom l (AMaybeT f) = AMaybeT (zoom l f)
+type instance Zoomed (AExceptT e m) = Zoomed (ExceptT e m)
+instance Zoom m n s t => Zoom (AExceptT e m) (AExceptT e n) s t where
+    zoom l (AExceptT f) = AExceptT (zoom l f)
 
 -- | This is the reason for the newtye wrapper
 -- Unlike the Monad instance, the Semigroup instance always run both args.
-instance (Monad m, Semigroup (m a)) => Semigroup (AMaybeT m a) where
-    (AMaybeT (MaybeT f)) <> (AMaybeT (MaybeT g)) = AMaybeT . MaybeT $ do
-        -- run both
-        (a, b) <- liftA2 (,) f g
-        case (a, b) of
-            (Nothing, b') -> pure b'
-            (a', Nothing) -> pure a'
-            (Just a', Just b') -> Just <$> ((pure a') <> (pure b'))
+-- Unlike other AXXX transformers, this instance relies on the inner monad to be
+-- @Semigroup (m (Either e a))@, not just @Semigroup (m a))@.
+instance (Semigroup (m (Either e a))) => Semigroup (AExceptT e m a) where
+    (AExceptT (ExceptT f)) <> (AExceptT (ExceptT g)) = AExceptT . ExceptT $ f <> g
 
 -- | This is the reason for the newtye wrapper
 -- Unlike the Monad instance, the Monoid instance always run both args.
-instance (Monad m, Monoid (m a)) => Monoid (AMaybeT m a) where
-    mempty = AMaybeT . MaybeT $ Just <$> mempty
-    (AMaybeT (MaybeT f)) `mappend` (AMaybeT (MaybeT g)) = AMaybeT . MaybeT $ do
-        -- run both
-        (a, b) <- liftA2 (,) f g
-        case (a, b) of
-            (Nothing, b') -> pure b'
-            (a', Nothing) -> pure a'
-            (Just a', Just b') -> Just <$> ((pure a') `mappend` (pure b'))
+-- Unlike other AXXX transformers, this instance relies on the inner monad to be
+-- @Monoid (m (Either e a))@, not just @Monoid (m a))@.
+instance (Monoid (m (Either e a))) => Monoid (AExceptT e m a) where
+    mempty = AExceptT . ExceptT $ mempty
+    (AExceptT (ExceptT f)) `mappend` (AExceptT (ExceptT g)) = AExceptT . ExceptT $ f `mappend` g
