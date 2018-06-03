@@ -2,10 +2,23 @@ module Control.Monad.Delegate (
     -- * MonadDelegate class
     module Control.Monad.Delegate.Class,
 
-    -- * The ContT monad
-    module Control.Monad,
-    module Control.Monad.Trans.Cont,
+    -- * The Cont monad
+    Cont,
+    cont,
+    runCont,
+    evalCont,
+    mapCont,
+    withCont,
+    -- * The ContT monad transformer
+    ContT(ContT),
+    runContT,
+    evalContT,
+    mapContT,
+    withContT,
+   -- * The AContT monad transformer
     module Control.Monad.Trans.ACont,
+   -- * The monad transformers
+    module Control.Monad,
     module Control.Monad.Trans,
     ) where
 

@@ -27,9 +27,11 @@ class Monad m => MonadDelegate r m | m -> r where
     -- @
     delegate :: ((a -> m r) -> m r) -> m a
 
+-- | Instance that does real work using continuations
 instance Monad m => MonadDelegate r (ContT r m) where
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
 
+-- | Instance that does real work using continuations
 instance Monad m => MonadDelegate r (AContT r m) where
     delegate f = acontT $ \k -> evalAContT $ f (lift . k)
 
