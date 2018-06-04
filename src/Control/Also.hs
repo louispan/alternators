@@ -30,9 +30,17 @@ class Also m a where
 
 infixr 6 `also` -- like <>
 
+instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
+    alsoZero = pure mempty
+    f `also` g = liftA2 (<>) f g
+
 instance (Monoid a) => Also Identity a where
-    alsoZero = Identity mempty
-    (Identity a) `also` (Identity b) = Identity $ a <> b
+    alsoZero = mempty
+    a `also` b = a <> b
+
+instance (Monoid a) => Also IO a where
+    alsoZero = mempty
+    a `also` b = a <> b
 
 instance (Also m a) => Also (IdentityT m) a where
     alsoZero = IdentityT alsoZero

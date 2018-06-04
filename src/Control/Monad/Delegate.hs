@@ -81,3 +81,10 @@ finishLeft m = m >>= either (finish . pure) pure
 -- | finish the 'Right' possibility
 finishRight :: MonadDelegate r m => m (Either a r) -> m a
 finishRight m = m >>= either pure (finish . pure)
+
+maybeDelegate :: MonadDelegate r m => r -> m (Maybe a) -> m a
+maybeDelegate r m = delegate $ \fire -> do
+    ma <- m
+    case ma of
+        Nothing -> pure r
+        Just a -> fire a
