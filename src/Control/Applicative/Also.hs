@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Control.Also where
+module Control.Applicative.Also where
 
 import Control.Applicative
 import Control.Monad.Trans.Class
@@ -22,14 +22,15 @@ import Data.Functor.Identity
 
 -- | Combining effects where both input effects are used as much as possible.
 -- as opposed to 'Control.Applicative.Alternative' where only the "successful" effect is used.
-class Also m a where
+class Applicative f => Also f a where
     -- | An associative binary operation, where both input effects are used as much as possible.
-    also :: m a -> m a -> m a
+    also :: f a -> f a -> f a
     -- | The identity of 'also'
-    alsoZero :: m a
+    alsoZero :: f a
 
 infixr 6 `also` -- like <>
 
+-- | Overlappable instance for all Applicatives of Monoids.
 instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
     alsoZero = pure mempty
     f `also` g = liftA2 (<>) f g
@@ -56,11 +57,11 @@ instance (Also m a) => Also (ReaderT r m) a where
     alsoZero = ReaderT $ const alsoZero
     (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
 
-instance (Also m (Either e a)) => Also (ExceptT e m) a where
+instance (Also m (Either e a), Monad m) => Also (ExceptT e m) a where
     alsoZero = ExceptT $ alsoZero
     (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
 
-instance (Also m (Maybe a)) => Also (MaybeT m) a where
+instance (Also m (Maybe a), Monad m) => Also (MaybeT m) a where
     alsoZero = MaybeT $ alsoZero
     (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
 

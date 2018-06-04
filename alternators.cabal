@@ -17,7 +17,7 @@ Tested-With:         GHC == 8.4.1
 library
   hs-source-dirs:      src
   exposed-modules:
-                       Control.Also
+                       Control.Applicative.Also
                        Control.Monad.Delegate
                        Control.Monad.Trans.Maybe.Extras
   build-depends:       base >= 4.7 && < 5
