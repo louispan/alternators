@@ -17,14 +17,14 @@ Tested-With:         GHC == 8.4.1
 library
   hs-source-dirs:      src
   exposed-modules:
-                       Control.Applicative.Also
+                       Control.Also
                        Control.Monad.Delegate
                        Control.Monad.Trans.Maybe.Extras
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
                      , mtl >= 2
-                     , stm >= 2.4.4.1
-                     , newtype-generics >= 0.5.2.1
+                     , stm >= 2.4
+                     , newtype-generics >= 0.5
                      , transformers >= 0.4
                      , lens >= 4
   ghc-options:         -Wall

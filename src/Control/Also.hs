@@ -1,11 +1,14 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Control.Applicative.Also where
+module Control.Also where
 
 import Control.Applicative
+import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Except
@@ -18,17 +21,32 @@ import Control.Monad.Trans.State.Lazy as Lazy
 import Control.Monad.Trans.State.Strict as Strict
 import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
+import Control.Newtype.Generics
 import Data.Functor.Identity
+import GHC.Generics
 
 -- | Combining effects where both input effects are used as much as possible.
 -- as opposed to 'Control.Applicative.Alternative' where only the "successful" effect is used.
-class Applicative f => Also f a where
+class Also f a where
     -- | An associative binary operation, where both input effects are used as much as possible.
     also :: f a -> f a -> f a
     -- | The identity of 'also'
     alsoZero :: f a
 
 infixr 6 `also` -- like <>
+
+-- | Monoid under 'also'.
+newtype Als f a = Als { getAls :: f a }
+    deriving (Generic, Generic1, Read, Show, Eq, Ord, Num, Enum,
+                Monad, MonadPlus, Applicative, Alternative, Functor)
+
+instance Newtype (Als f a)
+
+instance Also f a => Semigroup (Als f a) where
+    (Als f) <> (Als g) = Als (f `also` g)
+
+instance Also f a => Monoid (Als f a) where
+    mempty = Als alsoZero
 
 -- | Overlappable instance for all Applicatives of Monoids.
 instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
@@ -57,11 +75,11 @@ instance (Also m a) => Also (ReaderT r m) a where
     alsoZero = ReaderT $ const alsoZero
     (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
 
-instance (Also m (Either e a), Monad m) => Also (ExceptT e m) a where
+instance (Also m (Either e a)) => Also (ExceptT e m) a where
     alsoZero = ExceptT $ alsoZero
     (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
 
-instance (Also m (Maybe a), Monad m) => Also (MaybeT m) a where
+instance (Also m (Maybe a)) => Also (MaybeT m) a where
     alsoZero = MaybeT $ alsoZero
     (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
 
