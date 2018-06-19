@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -25,6 +26,10 @@ import Control.Newtype.Generics
 import Data.Functor.Identity
 import GHC.Generics
 
+#if MIN_VERSION_base(4,9,0) && !MIN_VERSION_base(4,10,0)
+import Data.Semigroup
+#endif
+
 -- | Combining effects where both input effects are used as much as possible.
 -- as opposed to 'Control.Applicative.Alternative' where only the "successful" effect is used.
 class Also f a where
@@ -36,6 +41,7 @@ class Also f a where
 infixr 6 `also` -- like <>
 
 -- | Monoid under 'also'.
+-- Mnemonic: 'Als' for 'Also', just like 'Alt' for 'Altenative'
 newtype Als f a = Als { getAls :: f a }
     deriving (Generic, Generic1, Read, Show, Eq, Ord, Num, Enum,
                 Monad, MonadPlus, Applicative, Alternative, Functor)
@@ -47,19 +53,40 @@ instance Also f a => Semigroup (Als f a) where
 
 instance Also f a => Monoid (Als f a) where
     mempty = Als alsoZero
+#if !MIN_VERSION_base(4,11,0)
+    (Als f) `mappend` (Als g) = Als (f `also` g)
+#endif
 
 -- | Overlappable instance for all Applicatives of Monoids.
+#if MIN_VERSION_base(4,11,0)
 instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
     alsoZero = pure mempty
     f `also` g = liftA2 (<>) f g
+#else
+instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
+    alsoZero = pure mempty
+    f `also` g = liftA2 mappend f g
+#endif
 
+#if MIN_VERSION_base(4,11,0)
 instance (Monoid a) => Also Identity a where
     alsoZero = mempty
     a `also` b = a <> b
+#else
+instance (Monoid a) => Also Identity a where
+    alsoZero = mempty
+    a `also` b = a `mappend` b
+#endif
 
+#if MIN_VERSION_base(4,11,0)
 instance (Monoid a) => Also IO a where
     alsoZero = mempty
     a `also` b = a <> b
+#else
+instance (Monoid a) => Also IO a where
+    alsoZero = pure mempty
+    a `also` b = liftA2 mappend a b
+#endif
 
 instance (Also m a) => Also (IdentityT m) a where
     alsoZero = IdentityT alsoZero

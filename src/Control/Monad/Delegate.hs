@@ -4,6 +4,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Control.Monad.Delegate where
@@ -58,7 +59,7 @@ finish :: forall a r m. MonadDelegate r m => m r -> m a
 finish = delegate . const
 
 -- | Convert two handler to a monad that may fire two possibilities
--- | The inverse is 'bind2'.
+-- The inverse is 'bind2'.
 multitask :: MonadDelegate r m => ((a -> m r) -> (b -> m r) -> m r) -> m (Either a b)
 multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
 
