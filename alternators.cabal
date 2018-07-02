@@ -1,7 +1,7 @@
 name:                alternators
 version:             1.0.0.0
-synopsis:            Handy functions when using transformers
-description:         Please see README.md
+synopsis:            Handy functions when using transformers.
+description:         Useful monads built on top of transformers. Please see README.md
 homepage:            https://github.com/louispan/alternators#readme
 license:             BSD3
 license-file:        LICENSE

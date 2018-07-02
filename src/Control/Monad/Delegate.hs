@@ -83,6 +83,7 @@ finishLeft m = m >>= either (finish . pure) pure
 finishRight :: MonadDelegate r m => m (Either a r) -> m a
 finishRight m = m >>= either pure (finish . pure)
 
+-- | maybe 'delegate' the Just value, or just use the @r@.
 maybeDelegate :: MonadDelegate r m => r -> m (Maybe a) -> m a
 maybeDelegate r m = delegate $ \fire -> do
     ma <- m
