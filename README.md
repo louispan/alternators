@@ -5,6 +5,9 @@
 
 # Changelog
 
+* 1.1.0.0
+  - Renamed `bind2` to `bindBoth`.
+
 * 1.0.0.0
   - Removed `runReaderM` as it can be replaced with `lift`, `hoist` and `>>=`
     See [gist](https://gist.github.com/louispan/1c7792d45ebe5559ffc45aa9db461c35)

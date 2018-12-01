@@ -59,21 +59,21 @@ finish :: forall a r m. MonadDelegate r m => m r -> m a
 finish = delegate . const
 
 -- | Convert two handler to a monad that may fire two possibilities
--- The inverse is 'bind2'.
+-- The inverse is 'bindBoth'.
 multitask :: MonadDelegate r m => ((a -> m r) -> (b -> m r) -> m r) -> m (Either a b)
 multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
 
 -- | Convert a monad that fires two possibilites to a two handlers.
-bind2 :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
-bind2 m fa fb = m >>= either fa fb
+bindBoth :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
+bindBoth m fa fb = m >>= either fa fb
 
 -- | 'bind' only the 'Right' possibility.
 bindRight :: Monad m => m (Either a b) -> (b -> m c) -> m (Either a c)
-bindRight m k = bind2 m (pure . Left) (fmap Right . k)
+bindRight m k = bindBoth m (pure . Left) (fmap Right . k)
 
 -- | 'bind' only the 'Left' possibility.
 bindLeft :: Monad m => m (Either a b) -> (a -> m c) -> m (Either c b)
-bindLeft m k = bind2 m (fmap Left . k) (pure . Right)
+bindLeft m k = bindBoth m (fmap Left . k) (pure . Right)
 
 -- | finish the 'Left' possibility
 finishLeft :: MonadDelegate r m => m (Either r b) -> m b

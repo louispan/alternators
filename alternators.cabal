@@ -1,5 +1,5 @@
 name:                alternators
-version:             1.0.0.0
+version:             1.1.0.0
 synopsis:            Handy functions when using transformers.
 description:         Useful monads built on top of transformers. Please see README.md
 homepage:            https://github.com/louispan/alternators#readme
