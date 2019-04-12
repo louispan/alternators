@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -9,6 +10,7 @@
 module Control.Also where
 
 import Control.Applicative
+import Data.Proxy
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Cont
@@ -26,6 +28,10 @@ import Control.Newtype.Generics
 import Data.Functor.Identity
 import GHC.Generics
 
+#if MIN_VERSION_base(4,12,0)
+import Data.Monoid (Ap)
+#endif
+
 #if MIN_VERSION_base(4,9,0) && !MIN_VERSION_base(4,10,0)
 import Data.Semigroup
 #endif
@@ -35,12 +41,17 @@ import Data.Semigroup
 class Also f a where
     -- | An associative binary operation, where both input effects are used as much as possible.
     also :: f a -> f a -> f a
+    default also :: Monoid (f a) => f a -> f a -> f a
+    also = mappend
     -- | The identity of 'also'
     alsoZero :: f a
+    default alsoZero :: Monoid (f a) => f a
+    alsoZero = mempty
 
 infixr 6 `also` -- like <>
 
 -- | Monoid under 'also'.
+-- Ie. expose 'Monoid' but use 'also'
 -- Mnemonic: 'Als' for 'Also', just like 'Alt' for 'Altenative'
 newtype Als f a = Als { getAls :: f a }
     deriving (Generic, Generic1, Read, Show, Eq, Ord, Num, Enum,
@@ -57,51 +68,61 @@ instance Also f a => Monoid (Als f a) where
     (Als f) `mappend` (Als g) = Als (f `also` g)
 #endif
 
--- | Overlappable instance for all Applicatives of Monoids.
-#if MIN_VERSION_base(4,11,0)
-instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
-    alsoZero = pure mempty
-    f `also` g = liftA2 (<>) f g
-#else
-instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
-    alsoZero = pure mempty
-    f `also` g = liftA2 mappend f g
+#if MIN_VERSION_base(4,12,0)
+-- | 'also' under '<|>'.
+-- Ie. expose 'Also' but use '<>'
+-- The 'Also' equivalent of 'Ap'
+instance (Monoid a, Applicative f) => Also (Ap f) a where
+    (Ap f) `also` (Ap g) = f <> g
+    alsoZero = mempty
 #endif
 
-#if MIN_VERSION_base(4,11,0)
-instance (Monoid a) => Also Identity a where
-    alsoZero = mempty
-    a `also` b = a <> b
-#else
-instance (Monoid a) => Also Identity a where
-    alsoZero = mempty
-    a `also` b = a `mappend` b
-#endif
+-- -- | Overlappable instance for all Applicatives of Monoids.
+-- #if MIN_VERSION_base(4,11,0)
+-- instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
+--     alsoZero = pure mempty
+--     f `also` g = liftA2 (<>) f g
+-- #else
+-- instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
+--     alsoZero = pure mempty
+--     f `also` g = liftA2 mappend f g
+-- #endif
+
+instance Monoid a => Also Identity a
 
 #if MIN_VERSION_base(4,11,0)
-instance (Monoid a) => Also IO a where
-    alsoZero = mempty
-    a `also` b = a <> b
+instance (Monoid a) => Also IO a
 #else
 instance (Monoid a) => Also IO a where
     alsoZero = pure mempty
     a `also` b = liftA2 mappend a b
 #endif
 
+instance Also [] a
+instance Monoid a => Also Maybe a
+instance Monoid a => Also ((->) r) a
+instance Also Proxy a
+instance Monoid c => Also (Const c) a
+
+-- | passthrough instance
+instance (Also m a) => Also (ReaderT r m) a where
+    alsoZero = ReaderT $ const alsoZero
+    (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
+
+-- | passthrough instance
 instance (Also m a) => Also (IdentityT m) a where
     alsoZero = IdentityT alsoZero
     (IdentityT a) `also` (IdentityT b) = IdentityT $ a `also` b
 
--- | Combine the monads that returns @r@ not @a@.
+-- | Note: this instance combines monads that returns @r@ not @a@.
 instance (Also m r) => Also (ContT r m) a where
     alsoZero = ContT . const $ alsoZero
     (ContT f) `also` (ContT g) =
         ContT $ \k -> (f k) `also` (g k)
 
-instance (Also m a) => Also (ReaderT r m) a where
-    alsoZero = ReaderT $ const alsoZero
-    (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
-
+-- | passthrough instance, but only if the inner monad
+-- is a 'Also' for m (Either e a)'
+-- Usually this meand a ContT in the inner monad stack
 instance (Also m (Either e a)) => Also (ExceptT e m) a where
     alsoZero = ExceptT $ alsoZero
     (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g

@@ -16,77 +16,86 @@ import Control.Monad.Trans.Identity
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
 
-class Monad m => MonadDelegate r m | m -> r where
-    -- | The inverse of 'delegate' is 'bind'
-    --
-    -- @
-    -- (>>=) :: Monad m => m a -> (a -> m r) -> m r
-    -- @
-    delegate :: ((a -> m r) -> m r) -> m a
+-- | Delegates the handing of @a@ to a continuation.
+-- The "inverse" of 'delegate' is a bit like a contrained 'bind'
+--
+-- @
+-- (>>=) :: Monad m => m a -> (a -> m b) -> m b
+-- contrainedBind :: Monad m => m a -> (a -> m ()) -> m ()
+-- @
+class Monad m => MonadDelegate m where
+    delegate :: ((a -> m ()) -> m ()) -> m a
 
 -- | Instance that does real work using continuations
-instance Monad m => MonadDelegate r (ContT r m) where
+instance Monad m => MonadDelegate (ContT () m) where
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
 
 -- | Passthrough instance
-instance (MonadDelegate r m) => MonadDelegate r (IdentityT m) where
+instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
 
 -- | Passthrough instance
-instance (MonadDelegate r m) => MonadDelegate r (ReaderT env m) where
-    delegate f = ReaderT $ \r -> delegate $ \k -> (`runReaderT` r) $ f (lift . k)
+instance (MonadDelegate m) => MonadDelegate (ReaderT env m) where
+    delegate f = ReaderT $ \env -> delegate $ \k -> (`runReaderT` env) $ f (lift . k)
 
 -- | Passthrough instance
-instance (MonadDelegate r m) => MonadDelegate r (MaybeT m) where
-    delegate f = MaybeT . delegate $ \k -> do
-        a <- runMaybeT . f $ lift . k . Just
-        case a of
+instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
+    -- f :: ((a -> MaybeT m ()) -> MaybeT m ())
+    delegate f = MaybeT . delegate $ \k -> do -- k :: (Maybe a -> m ())
+        -- Use the given @f@ handler with the 'Just' case of @k@
+        mr <- runMaybeT . f $ lift . k . Just -- m (Maybe ())
+        -- m ()
+        case mr of
+            -- use the 'Nothing' case of @k@
             Nothing -> k Nothing
-            Just a' -> pure a'
+            _ -> pure ()
 
 -- | Passthrough instance
-instance (MonadDelegate r m) => MonadDelegate r (ExceptT e m) where
-    delegate f = ExceptT . delegate $ \kea -> do
-        e <- runExceptT . f $ lift . kea . Right -- m (Either e a)
-        case e of
-            Left e' -> kea (Left e')
-            Right r -> pure r
+instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
+    -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
+    delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
+        -- Use the given @f@ handler with the 'Right' case of @k@
+        er <- runExceptT . f $ lift . k . Right -- m (Either e ())
+        -- m ()
+        case er of
+            -- use the 'Left' case of @k@
+            Left e -> k (Left e)
+            _ -> pure ()
 
 -- | Only handle with given monad, and ignore anything else.
 -- This means subseqent fmap, aps, binds are always ignored.
 -- @forall@ so @TypeApplications@ can be used to specify the type of @a@
-finish :: forall a r m. MonadDelegate r m => m r -> m a
+finish :: forall a m. MonadDelegate m => m () -> m a
 finish = delegate . const
 
--- | Convert two handler to a monad that may fire two possibilities
--- The inverse is 'bindBoth'.
-multitask :: MonadDelegate r m => ((a -> m r) -> (b -> m r) -> m r) -> m (Either a b)
-multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
+-- -- | Convert two handler to a monad that may fire two possibilities
+-- -- The inverse is 'bindBoth'.
+-- multitask :: MonadDelegate r m => ((a -> m r) -> (b -> m r) -> m r) -> m (Either a b)
+-- multitask g = delegate $ \fab -> g (fab . Left) (fab . Right)
 
--- | Convert a monad that fires two possibilites to a two handlers.
-bindBoth :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
-bindBoth m fa fb = m >>= either fa fb
+-- -- | Convert a monad that fires two possibilites to a two handlers.
+-- bindBoth :: Monad m => m (Either a b) -> (a -> m r) -> (b -> m r) -> m r
+-- bindBoth m fa fb = m >>= either fa fb
 
--- | 'bind' only the 'Right' possibility.
-bindRight :: Monad m => m (Either a b) -> (b -> m c) -> m (Either a c)
-bindRight m k = bindBoth m (pure . Left) (fmap Right . k)
+-- -- | 'bind' only the 'Right' possibility.
+-- bindRight :: Monad m => m (Either a b) -> (b -> m c) -> m (Either a c)
+-- bindRight m k = bindBoth m (pure . Left) (fmap Right . k)
 
--- | 'bind' only the 'Left' possibility.
-bindLeft :: Monad m => m (Either a b) -> (a -> m c) -> m (Either c b)
-bindLeft m k = bindBoth m (fmap Left . k) (pure . Right)
+-- -- | 'bind' only the 'Left' possibility.
+-- bindLeft :: Monad m => m (Either a b) -> (a -> m c) -> m (Either c b)
+-- bindLeft m k = bindBoth m (fmap Left . k) (pure . Right)
 
--- | finish the 'Left' possibility
-finishLeft :: MonadDelegate r m => m (Either r b) -> m b
-finishLeft m = m >>= either (finish . pure) pure
+-- -- | finish the 'Left' possibility
+-- finishLeft :: MonadDelegate r m => m (Either r b) -> m b
+-- finishLeft m = m >>= either (finish . pure) pure
 
--- | finish the 'Right' possibility
-finishRight :: MonadDelegate r m => m (Either a r) -> m a
-finishRight m = m >>= either pure (finish . pure)
+-- -- | finish the 'Right' possibility
+-- finishRight :: MonadDelegate r m => m (Either a r) -> m a
+-- finishRight m = m >>= either pure (finish . pure)
 
--- | maybe 'delegate' the Just value, or just use the @r@.
-maybeDelegate :: MonadDelegate r m => r -> m (Maybe a) -> m a
-maybeDelegate r m = delegate $ \fire -> do
-    ma <- m
+-- | Only care handling the 'Just' case, don't do anything for 'Nothing'
+fireJust :: MonadDelegate m => Maybe a -> m a
+fireJust ma = delegate $ \fire -> do
     case ma of
-        Nothing -> pure r
+        Nothing -> pure ()
         Just a -> fire a

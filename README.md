@@ -5,6 +5,10 @@
 
 # Changelog
 
+* 2.0.0.0
+  - Renamed `MonadDelegate` to `MonadDefer`, `delegate` to `defer`.
+  - Removed `multitask`, `bindBoth`, `bindRight`, `bindLeft`, `finishLeft`, `finishRight`.
+
 * 1.1.0.0
   - Renamed `bind2` to `bindBoth`.
 
