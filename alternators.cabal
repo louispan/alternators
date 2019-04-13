@@ -18,6 +18,7 @@ library
   hs-source-dirs:      src
   exposed-modules:
                        Control.Also
+                       Control.Monad.Bind
                        Control.Monad.Delegate
                        Control.Monad.Trans.Maybe.Extras
   build-depends:       base >= 4.7 && < 5
@@ -28,6 +29,15 @@ library
                      , transformers >= 0.4
                      , lens >= 4
   ghc-options:         -Wall -Wredundant-constraints
+  default-language:    Haskell2010
+
+test-suite glazier-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base >= 4.7 && < 5
+                     , alternators >= 2.0
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall
   default-language:    Haskell2010
 
 source-repository head
