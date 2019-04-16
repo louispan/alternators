@@ -196,3 +196,7 @@ instance (Monoid w, Also m a, Monad m) => Also (Strict.RWST r w s m) a where
     f `also` g = do
         (x, y) <- liftA2 (,) f g
         lift $ pure x `also` pure y
+
+instance (Also m a) => Also ((->) r) (m a) where
+    alsoZero = const alsoZero
+    f `also` g = \r -> f r `also` g r
