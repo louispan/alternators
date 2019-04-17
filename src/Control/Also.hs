@@ -41,17 +41,13 @@ import Data.Semigroup
 class Also f a where
     -- | An associative binary operation, where both input effects are used as much as possible.
     also :: f a -> f a -> f a
-    default also :: Monoid (f a) => f a -> f a -> f a
-    also = mappend
     -- | The identity of 'also'
     alsoZero :: f a
-    default alsoZero :: Monoid (f a) => f a
-    alsoZero = mempty
 
 infixr 6 `also` -- like <>
 
 -- | Monoid under 'also'.
--- Ie. expose 'Monoid' but use 'also'
+-- Ie. Allow 'also' for 'Monoid' effects
 -- Mnemonic: 'Als' for 'Also', just like 'Alt' for 'Altenative'
 newtype Als f a = Als { getAls :: f a }
     deriving (Generic, Generic1, Read, Show, Eq, Ord, Num, Enum,
@@ -70,39 +66,43 @@ instance Also f a => Monoid (Als f a) where
 
 #if MIN_VERSION_base(4,12,0)
 -- | 'also' under '<|>'.
--- Ie. expose 'Also' but use '<>'
+-- Ie. Allow use '<>' for 'Also' effects
 -- The 'Also' equivalent of 'Ap'
 instance (Monoid a, Applicative f) => Also (Ap f) a where
     (Ap f) `also` (Ap g) = f <> g
     alsoZero = mempty
 #endif
 
--- -- | Overlappable instance for all Applicatives of Monoids.
--- #if MIN_VERSION_base(4,11,0)
--- instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
---     alsoZero = pure mempty
---     f `also` g = liftA2 (<>) f g
--- #else
--- instance {-# OVERLAPPABLE #-} (Monoid a, Applicative f) => Also f a where
---     alsoZero = pure mempty
---     f `also` g = liftA2 mappend f g
--- #endif
+-- | Overlappable instance for all Monoids.
+-- instance {-# OVERLAPPABLE #-} (Monoid (f a)) => Also f a where
+--     alsoZero = mempty
+--     also = mappend
 
-instance Monoid a => Also Identity a
+-- -- overlapping instance to passthrough Also to return type
+-- instance Also m a => Also IO (m a) where
+--     alsoZero = pure alsoZero -- or should it be pure ()?
+--     f `also` g = liftA2 also f g
 
-#if MIN_VERSION_base(4,11,0)
-instance (Monoid a) => Also IO a
-#else
-instance (Monoid a) => Also IO a where
-    alsoZero = pure mempty
-    a `also` b = liftA2 mappend a b
-#endif
+-- instance  Semigroup a => Also Maybe a where
+--     alsoZero = Nothing
+--     Nothing `also` r = r
+--     r `also` Nothing = r
+--     (Just x) `also` (Just y) = Just (x <> y)
 
-instance Also [] a
-instance Monoid a => Also Maybe a
-instance Monoid a => Also ((->) r) a
-instance Also Proxy a
-instance Monoid c => Also (Const c) a
+-- terminating instance
+instance Also IO () where
+    alsoZero = pure ()
+    also = (*>)
+
+-- terminating instance
+instance Also Identity () where
+    alsoZero = pure ()
+    also = (*>)
+
+-- same instance as ReaderT
+instance (Also m a) => Also ((->) r) (m a) where
+    alsoZero = const alsoZero
+    f `also` g = \r -> f r `also` g r
 
 -- | passthrough instance
 instance (Also m a) => Also (ReaderT r m) a where
@@ -122,11 +122,14 @@ instance (Also m r) => Also (ContT r m) a where
 
 -- | passthrough instance, but only if the inner monad
 -- is a 'Also' for m (Either e a)'
--- Usually this meand a ContT in the inner monad stack
+-- Usually this means a ContT in the inner monad stack
 instance (Also m (Either e a)) => Also (ExceptT e m) a where
     alsoZero = ExceptT $ alsoZero
     (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
 
+-- | passthrough instance, but only if the inner monad
+-- is a 'Also' for m (Either e a)'
+-- Usually this means a ContT in the inner monad stack
 instance (Also m (Maybe a)) => Also (MaybeT m) a where
     alsoZero = MaybeT $ alsoZero
     (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
@@ -197,6 +200,3 @@ instance (Monoid w, Also m a, Monad m) => Also (Strict.RWST r w s m) a where
         (x, y) <- liftA2 (,) f g
         lift $ pure x `also` pure y
 
-instance (Also m a) => Also ((->) r) (m a) where
-    alsoZero = const alsoZero
-    f `also` g = \r -> f r `also` g r
