@@ -28,7 +28,7 @@ import Data.Functor.Identity
 import GHC.Generics
 
 #if MIN_VERSION_base(4,12,0)
-import Data.Monoid (Ap)
+import Data.Monoid (Ap(..))
 #endif
 
 #if MIN_VERSION_base(4,9,0) && !MIN_VERSION_base(4,10,0)
@@ -37,7 +37,7 @@ import Data.Semigroup
 
 -- | Combining effects where both input effects are used as much as possible.
 -- as opposed to 'Control.Applicative.Alternative' where only the "successful" effect is used.
-class Also f a where
+class Also a f where
     -- | An associative binary operation, where both input effects are used as much as possible.
     also :: f a -> f a -> f a
     -- | The identity of 'also'
@@ -54,10 +54,10 @@ newtype Als f a = Als { getAls :: f a }
 
 instance Newtype (Als f a)
 
-instance Also f a => Semigroup (Als f a) where
+instance Also a f => Semigroup (Als f a) where
     (Als f) <> (Als g) = Als (f `also` g)
 
-instance Also f a => Monoid (Als f a) where
+instance Also a f => Monoid (Als f a) where
     mempty = Als alsoZero
 #if !MIN_VERSION_base(4,11,0)
     (Als f) `mappend` (Als g) = Als (f `also` g)
@@ -67,8 +67,8 @@ instance Also f a => Monoid (Als f a) where
 -- | 'also' under '<|>'.
 -- Ie. Allow use '<>' for 'Also' effects
 -- The 'Also' equivalent of 'Ap'
-instance (Monoid a, Applicative f) => Also (Ap f) a where
-    (Ap f) `also` (Ap g) = f <> g
+instance (Monoid a, Applicative f) => Also a (Ap f) where
+    f `also` g = f <> g
     alsoZero = mempty
 #endif
 
@@ -89,32 +89,32 @@ instance (Monoid a, Applicative f) => Also (Ap f) a where
 --     (Just x) `also` (Just y) = Just (x <> y)
 
 -- terminating instance
-instance Also IO () where
+instance Also () IO where
     alsoZero = pure ()
     also = (*>)
 
 -- terminating instance
-instance Also Identity () where
+instance Also () Identity where
     alsoZero = pure ()
     also = (*>)
 
--- same instance as ReaderT
-instance (Also m a) => Also ((->) r) (m a) where
+-- similar instance as ReaderT
+instance (Also a m) => Also (m a) ((->) r) where
     alsoZero = const alsoZero
     f `also` g = \r -> f r `also` g r
 
 -- | passthrough instance
-instance (Also m a) => Also (ReaderT r m) a where
+instance (Also a m) => Also a (ReaderT r m) where
     alsoZero = ReaderT $ const alsoZero
     (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
 
 -- | passthrough instance
-instance (Also m a) => Also (IdentityT m) a where
+instance (Also a m) => Also a (IdentityT m) where
     alsoZero = IdentityT alsoZero
     (IdentityT a) `also` (IdentityT b) = IdentityT $ a `also` b
 
 -- | Note: this instance combines monads that returns @r@ not @a@.
-instance (Also m r) => Also (ContT r m) a where
+instance (Also r m) => Also a (ContT r m) where
     alsoZero = ContT . const $ alsoZero
     (ContT f) `also` (ContT g) =
         ContT $ \k -> (f k) `also` (g k)
@@ -122,14 +122,14 @@ instance (Also m r) => Also (ContT r m) a where
 -- | passthrough instance, but only if the inner monad
 -- is a 'Also' for m (Either e a)'
 -- Usually this means a ContT in the inner monad stack
-instance (Also m (Either e a)) => Also (ExceptT e m) a where
+instance (Also (Either e a) m) => Also a (ExceptT e m) where
     alsoZero = ExceptT $ alsoZero
     (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
 
 -- | passthrough instance, but only if the inner monad
 -- is a 'Also' for m (Either e a)'
 -- Usually this means a ContT in the inner monad stack
-instance (Also m (Maybe a)) => Also (MaybeT m) a where
+instance (Also (Maybe a) m) => Also a (MaybeT m) where
     alsoZero = MaybeT $ alsoZero
     (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
 
@@ -138,7 +138,7 @@ instance (Also m (Maybe a)) => Also (MaybeT m) a where
 -- early termination from the left monad (eg if the inner monad was
 -- a 'MaybeT' or 'ExceptT'.
 -- However, it is able to use the 'also' to combine the return value.
-instance (Also m a, Monad m) => Also (Lazy.StateT s m) a where
+instance (Also a m, Monad m) => Also a (Lazy.StateT s m) where
     alsoZero = lift alsoZero
     f `also` g = do
         (x, y) <- liftA2 (,) f g
@@ -149,7 +149,7 @@ instance (Also m a, Monad m) => Also (Lazy.StateT s m) a where
 -- early termination from the left monad (eg if the inner monad was
 -- a 'MaybeT' or 'ExceptT'.
 -- However, it is able to use the 'also' to combine the return value.
-instance (Also m a, Monad m) => Also (Strict.StateT s m) a where
+instance (Also a m, Monad m) => Also a (Strict.StateT s m) where
     alsoZero = lift alsoZero
     f `also` g = do
         (x, y) <- liftA2 (,) f g
@@ -160,7 +160,7 @@ instance (Also m a, Monad m) => Also (Strict.StateT s m) a where
 -- early termination from the left monad (eg if the inner monad was
 -- a 'MaybeT' or 'ExceptT'.
 -- However, it is able to use the 'also' to combine the return value.
-instance (Monoid w, Also m a, Monad m) => Also (Lazy.WriterT w m) a where
+instance (Monoid w, Also a m, Monad m) => Also a (Lazy.WriterT w m) where
     alsoZero = lift alsoZero
     f `also` g = do
         (x, y) <- liftA2 (,) f g
@@ -171,7 +171,7 @@ instance (Monoid w, Also m a, Monad m) => Also (Lazy.WriterT w m) a where
 -- early termination from the left monad (eg if the inner monad was
 -- a 'MaybeT' or 'ExceptT'.
 -- However, it is able to use the 'also' to combine the return value.
-instance (Monoid w, Also m a, Monad m) => Also (Strict.WriterT w m) a where
+instance (Monoid w, Also a m, Monad m) => Also a (Strict.WriterT w m) where
     alsoZero = lift alsoZero
     f `also` g = do
         (x, y) <- liftA2 (,) f g
@@ -182,7 +182,7 @@ instance (Monoid w, Also m a, Monad m) => Also (Strict.WriterT w m) a where
 -- early termination from the left monad (eg if the inner monad was
 -- a 'MaybeT' or 'ExceptT'.
 -- However, it is able to use the 'also' to combine the return value.
-instance (Monoid w, Also m a, Monad m) => Also (Lazy.RWST r w s m) a where
+instance (Monoid w, Also a m, Monad m) => Also a (Lazy.RWST r w s m) where
     alsoZero = lift alsoZero
     f `also` g = do
         (x, y) <- liftA2 (,) f g
@@ -193,7 +193,7 @@ instance (Monoid w, Also m a, Monad m) => Also (Lazy.RWST r w s m) a where
 -- early termination from the left monad (eg if the inner monad was
 -- a 'MaybeT' or 'ExceptT'.
 -- However, it is able to use the 'also' to combine the return value.
-instance (Monoid w, Also m a, Monad m) => Also (Strict.RWST r w s m) a where
+instance (Monoid w, Also a m, Monad m) => Also a (Strict.RWST r w s m) where
     alsoZero = lift alsoZero
     f `also` g = do
         (x, y) <- liftA2 (,) f g
