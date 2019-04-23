@@ -1,5 +1,9 @@
-module Control.Monad.Trans.Maybe.Extras where
+{-# LANGUAGE DerivingVia #-}
 
+module Control.Monad.Trans.Extras where
+
+import Control.Monad.Reader
+import Control.Monad.Morph
 import Control.Monad.Trans.Maybe
 import Data.Maybe
 

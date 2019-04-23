@@ -20,7 +20,7 @@ library
                        Control.Also
                        Control.Monad.Bind
                        Control.Monad.Delegate
-                       Control.Monad.Trans.Maybe.Extras
+                       Control.Monad.Trans.Extras
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
                      , mtl >= 2
