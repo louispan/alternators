@@ -18,6 +18,8 @@ library
   hs-source-dirs:      src
   exposed-modules:
                        Control.Also
+                       Control.Monad.Benign
+                       Control.Monad.Benign.Internal
                        Control.Monad.Bind
                        Control.Monad.Delegate
                        Control.Monad.Trans.Extras
