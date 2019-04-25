@@ -28,6 +28,9 @@ class Monad m => MonadBenignIO m where
     -- | Lift a computation from the 'Benign IO' monad.
     liftBenignIO :: Benign IO a -> m a
 
+instance MonadBenignIO IO where
+    liftBenignIO = getBenign
+
 instance MonadBenignIO (Benign IO) where
     liftBenignIO = id
 
