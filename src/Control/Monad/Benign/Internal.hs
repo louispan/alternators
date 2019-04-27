@@ -19,6 +19,9 @@ import Data.Semigroup
 newtype Benign m a = Benign (m a)
     deriving (G.Generic, G.Generic1, Functor, Applicative, Monad)
 
+instance Show (Benign m a) where
+    showsPrec _ _ = showString "Benign"
+
 instance MonadTrans Benign where
     lift = Benign
 
