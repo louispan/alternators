@@ -22,6 +22,8 @@ library
                        Control.Monad.Benign.Internal
                        Control.Monad.Bind
                        Control.Monad.Delegate
+                       Control.Monad.Env
+                       Control.Monad.Observer
                        Control.Monad.Trans.Extras
   build-depends:       base >= 4.7 && < 5
                      , mmorph >= 1
