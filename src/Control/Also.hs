@@ -11,6 +11,7 @@ module Control.Also where
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Delegate
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Except
@@ -119,19 +120,19 @@ instance (Also r m) => Also a (ContT r m) where
     (ContT f) `also` (ContT g) =
         ContT $ \k -> (f k) `also` (g k)
 
--- | passthrough instance, but only if the inner monad
--- is a 'Also' for m (Either e a)'
--- Usually this means a ContT in the inner monad stack
-instance (Also (Either e a) m) => Also a (ExceptT e m) where
-    alsoZero = ExceptT $ alsoZero
-    (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
+-- | passthrough instance, but only if there is
+-- a ContT in the inner monad stack
+instance (MonadDelegate m, Also () m) => Also a (ExceptT e m) where
+    alsoZero = finish (pure ())
+    (ExceptT f) `also` (ExceptT g) = ExceptT $ delegate $ \fire -> do
+        (f >>= fire) `also` (g >>= fire)
 
--- | passthrough instance, but only if the inner monad
--- is a 'Also' for m (Either e a)'
--- Usually this means a ContT in the inner monad stack
-instance (Also (Maybe a) m) => Also a (MaybeT m) where
-    alsoZero = MaybeT $ alsoZero
-    (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
+-- | passthrough instance, but only if there is
+-- a ContT in the inner monad stack
+instance (MonadDelegate m, Also () m) => Also a (MaybeT m) where
+    alsoZero = finish (pure ())
+    (MaybeT f) `also` (MaybeT g) = MaybeT $ delegate $ \fire -> do
+        (f >>= fire) `also` (g >>= fire)
 
 -- | State instances threads the state through both monad of 'also'
 -- in the normal left to right order, and so do not prevent
