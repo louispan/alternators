@@ -1,9 +1,12 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Control.Monad.Benign.Internal where
 
+import Control.Also
 import Control.Applicative
 import Control.Monad.Morph
 import qualified GHC.Generics as G
@@ -39,6 +42,10 @@ instance (Monoid a, Applicative m) => Monoid (Benign m a) where
 #if !MIN_VERSION_base(4,11,0)
     (Benign f) `mappend` (Benign g) = Benign (liftA2 mappend f g)
 #endif
+
+instance (Also a m) => Also a (Benign m) where
+    alsoZero = Benign alsoZero
+    (Benign a) `also` (Benign b) = Benign $ a `also` b
 
 getBenign :: Benign m a -> m a
 getBenign (Benign m) = m

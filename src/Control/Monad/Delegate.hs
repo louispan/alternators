@@ -48,6 +48,7 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
         case mr of
             -- use the 'Nothing' case of @k@
             Nothing -> k Nothing
+            -- Just () -> pure ()
             _ -> pure ()
 
 -- | Passthrough instance
@@ -60,6 +61,7 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
         case er of
             -- use the 'Left' case of @k@
             Left e -> k (Left e)
+            -- Right () -> pure ()
             _ -> pure ()
 
 -- | Only handle with given monad, and ignore anything else.
