@@ -94,8 +94,8 @@ finish = delegate . const
 -- finishRight m = m >>= either pure (finish . pure)
 
 -- | Only care handling the 'Just' case, don't do anything for 'Nothing'
-fireJust :: MonadDelegate m => Maybe a -> m a
-fireJust ma = delegate $ \fire -> do
+onJust :: MonadDelegate m => Maybe a -> m a
+onJust ma = delegate $ \fire -> do
     case ma of
         Nothing -> pure ()
         Just a -> fire a

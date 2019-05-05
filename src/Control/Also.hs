@@ -129,7 +129,7 @@ instance (MonadDelegate m, Also () m) => Also a (ExceptT e m) where
 
 -- | passthrough instance, but only if there is
 -- a ContT in the inner monad stack
-instance (MonadDelegate m, Also () m) => Also a (MaybeT m) where
+instance (MonadDelegate m, Also a m, Also () m) => Also a (MaybeT m) where
     alsoZero = finish (pure ())
     (MaybeT f) `also` (MaybeT g) = MaybeT $ delegate $ \fire -> do
         (f >>= fire) `also` (g >>= fire)
