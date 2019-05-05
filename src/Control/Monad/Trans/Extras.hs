@@ -13,5 +13,9 @@ evalMaybeT :: Functor m => MaybeT m a -> a -> m a
 evalMaybeT m a = (fromMaybe a) <$> (runMaybeT m)
 
 -- | mtl-like use of MaybeT
-whenMaybe :: Alternative f => Maybe a -> f a
-whenMaybe = maybe empty pure
+whenJust :: Alternative f => Maybe a -> f a
+whenJust = maybe empty pure
+
+-- | mtl-like use of MaybeT
+maybeM :: (Monad m, Alternative m) => m (Maybe a) -> m a
+maybeM = (>>= whenJust)
