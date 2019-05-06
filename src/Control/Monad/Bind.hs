@@ -1,15 +1,13 @@
-{-# LANGUAGE ConstrainedClassMethods #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 -- | Binds the n-th argument of a m-numery function (that retuns in a monad)
 -- with the result of a given monad.
 -- This results in a a (m-1) numery function that doesn't require the bound argument.
--- The conversion is a pure calculation, not under the monad.
 -- Example (more examples in the test/Spec.hs):
 -- @
 -- Given a function that takse 3 args and returns a monad

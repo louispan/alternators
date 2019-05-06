@@ -6,7 +6,6 @@
 module Control.Monad.Observer where
 
 import Control.Monad.Reader
-import Data.Maybe
 
 -- | There is no functional dependency @m -> a@ so it allows multiple uses of
 -- Observer to observer different things in the one function.

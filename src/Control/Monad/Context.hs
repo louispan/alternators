@@ -10,7 +10,6 @@ import Control.Monad.State.Strict as Strict
 import Control.Monad.RWS.Strict as Strict
 import Control.Monad.State.Lazy as Lazy
 import Control.Monad.RWS.Lazy as Lazy
-import Control.Monad.Morph
 
 -- | A copy of 'MonadReader' with overlapping instances
 class Monad m => MonadAsk r m where
