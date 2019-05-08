@@ -34,3 +34,19 @@ instance {-# OVERLAPPABLE #-} Monad m => Observer' f a (ReaderT (f a -> m ()) m)
 
 observe' :: Observer' f a m => f a -> m ()
 observe' a = askObserver' >>= ($ a)
+
+-- -- | 'runReaderT' that resolve ambiguity of @m@
+-- runObserver' :: Monad m => ReaderT (f a -> m ()) m r -> (f a -> m ()) -> m r
+-- runObserver' = runReaderT
+
+-- | 'runReaderT' that resolve ambiguity of @m@
+runObserver :: ReaderT (a -> m ()) m r -> (a -> m ()) -> m r
+runObserver = runReaderT
+
+-- | like 'fmap'ing the observed value
+reobserve :: Observer b m => (a -> b) -> ReaderT (a -> m ()) m r -> m r
+reobserve f m = runObserver m (observe . f)
+
+-- | like 'fmap'ing the observed value
+reobserve' :: Observer' f b m => (a -> f b) -> ReaderT (a -> m ()) m r -> m r
+reobserve' f m = runObserver m (observe' . f)
