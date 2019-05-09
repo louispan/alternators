@@ -23,6 +23,9 @@ import Control.Monad.Trans.Reader
 -- (>>=) :: Monad m => m a -> (a -> m b) -> m b
 -- contrainedBind :: Monad m => m a -> (a -> m ()) -> m ()
 -- @
+--
+-- An intuition for @MonadDelegate m => m a@ is that it fires an event @a@.
+-- and monadic binding with @a -> m b@ is handling the @a@ to fire @b@ event.
 class Monad m => MonadDelegate m where
     delegate :: ((a -> m ()) -> m ()) -> m a
 
@@ -65,8 +68,10 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
             _ -> pure ()
 
 -- | Only handle with given monad, and ignore anything else.
+-- @forall@ so @TypeApplications@ can be used to specify the type of @a@.
+-- It pretends to fire @a@ but never does.
 -- This means subseqent fmap, aps, binds are always ignored.
--- @forall@ so @TypeApplications@ can be used to specify the type of @a@
+-- This is like @throw@ in that exits event handler to a different control scope.
 finish :: forall a m. MonadDelegate m => m () -> m a
 finish = delegate . const
 
