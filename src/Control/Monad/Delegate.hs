@@ -48,7 +48,8 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
         case mr of
             -- use the 'Nothing' case of @k@
             Nothing -> k Nothing
-            Just () -> pure ()
+            -- Just () -> pure ()
+            _ -> pure ()
 
 -- | Passthrough instance
 instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
@@ -60,7 +61,8 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
         case er of
             -- use the 'Left' case of @k@
             Left e -> k (Left e)
-            Right () -> pure ()
+            -- Right () -> pure ()
+            _ -> pure ()
 
 -- | Only handle with given monad, and ignore anything else.
 -- This means subseqent fmap, aps, binds are always ignored.
@@ -95,7 +97,7 @@ finish = delegate . const
 
 -- | Only care handling the 'Just' case, don't do anything for 'Nothing'
 onJust :: MonadDelegate m => Maybe a -> m a
-onJust ma = delegate $ \fire -> do
+onJust ma = delegate $ \fire ->
     case ma of
         Nothing -> pure ()
         Just a -> fire a
