@@ -19,7 +19,6 @@ library
   exposed-modules:
                        Control.Also
                        Control.Monad.Benign
-                       Control.Monad.Benign.Internal
                        Control.Monad.Bind
                        Control.Monad.Delegate
                        Control.Monad.Context
@@ -27,9 +26,13 @@ library
                        Control.Monad.Trans.Extras
                        Data.Function.Recompose
                        Data.Functor.Extras
-                       Data.Functor.Functor2
+                      --  Data.Functor.Functor2
                        Data.Tagged.Extras
+                       Data.StableNameMap
   build-depends:       base >= 4.7 && < 5
+                     , containers >= 0.6
+                     , deepseq >= 1.4
+                     , dlist >= 0.8
                      , mmorph >= 1
                      , mtl >= 2
                      , stm >= 2.4
