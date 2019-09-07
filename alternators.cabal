@@ -27,7 +27,6 @@ library
                        Data.Function.Extras
                       --  Data.Functor.Functor2
                        Data.Tagged.Extras
-                       Data.EqHashMap
                        Data.AnyStableName
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.6
