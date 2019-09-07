@@ -27,11 +27,13 @@ library
                        Data.Function.Extras
                       --  Data.Functor.Functor2
                        Data.Tagged.Extras
-                       Data.StableNameMap
+                       Data.EqHashMap
+                       Data.AnyStableName
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.6
                      , deepseq >= 1.4
                      , dlist >= 0.8
+                     , hashable >= 1.2
                      , mmorph >= 1
                      , mtl >= 2
                      , stm >= 2.4
