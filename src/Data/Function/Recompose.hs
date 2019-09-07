@@ -2,29 +2,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
--- | Binds the n-th argument of a m-numery function (that retuns in a monad)
--- with the result of a given monad.
--- This results in a a (m-1) numery function that doesn't require the bound argument.
--- Example (more examples in the test/Spec.hs):
--- @
--- Given a function that takse 3 args and returns a monad
--- f :: a -> b -> c -> m d
---
--- and a monad that provides the 2nd arg
--- mb :: m b
-
--- If you want to "simply" the "f" to a function that only need 2 args
--- with the previous 2nd arg bound to the result of "mb"
--- g :: a -> c -> m d
-
--- Specifying my hand
--- g a c = do
---     b <- mb
---     f a b c
---
--- Using Control.Monad.Bind
--- g = f `bind2` mb
--- @
 module Data.Function.Recompose where
 
 -- | Compose in a way that function arguments are deferred to the resultant function.
