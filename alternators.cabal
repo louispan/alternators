@@ -25,6 +25,7 @@ library
                        Control.Monad.Trans.Extras
                       --  Data.Function.Recompose
                        Data.Function.Extras
+                       Data.Kind.Extras
                       --  Data.Functor.Functor2
                        Data.Tagged.Extras
                        Data.AnyStableName
