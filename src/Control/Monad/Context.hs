@@ -17,6 +17,7 @@ import Control.Monad.State.Lazy as Lazy
 import Control.Monad.State.Strict as Strict
 
 -- | like 'MonadReader' but with overlapping instances
+-- Use newtype wrappers or 'Tagged' to ensure unique @r@ in the monad stack.
 class Monad m => MonadAsk r m where
     askContext :: m r
 
@@ -70,63 +71,3 @@ modifyContext :: forall s m. MonadPut s m => (s -> s) -> m ()
 modifyContext f = do
     s <- askContext @s
     putContext $! f s
-
-
--- This is a bit yuck
--- Basically, I wasn to to say that something in between
--- functional dep and
-
-
-
--- -- | A copy of 'MonadReader' with overlapping instances
--- -- Two type variables are too ambiguous for overlapping instances to resolve
--- -- So fix the 2nd type variable @r@ to the monad @@.
--- class Monad m => MonadAsk' f r m | m -> r where
---     askContext' :: m (f r)
-
--- instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadAsk' f r m) => MonadAsk' f r (t m) where
---     askContext' = lift askContext'
-
--- instance {-# OVERLAPPABLE #-} Monad m => MonadAsk' f r (ReaderT (f r) m) where
---     askContext' = ask
-
--- instance {-# OVERLAPPABLE #-} Monad m => MonadAsk' f r (Strict.StateT (f r) m) where
---     askContext' = get
-
--- instance {-# OVERLAPPABLE #-} Monad m => MonadAsk' f r (Lazy.StateT (f r) m) where
---     askContext' = get
-
--- instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk' f r (Strict.RWST (f r) w s m) where
---     askContext' = ask
-
--- instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk' f r (Lazy.RWST (f r) w s m) where
---     askContext' = ask
-
--- instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk' f s (Strict.RWST r w (f s) m) where
---     askContext' = get
-
--- instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk' f s (Lazy.RWST r w (f s) m) where
---     askContext' = get
-
--- class MonadAsk' f s m => MonadPut' f s m | m -> s where
---     putContext' :: f s -> m ()
-
--- instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadPut' f s m) => MonadPut' f s (t m) where
---     putContext' = lift . putContext'
-
--- instance {-# OVERLAPPABLE #-} Monad m => MonadPut' f s (Strict.StateT (f s) m) where
---     putContext' = put
-
--- instance {-# OVERLAPPABLE #-} Monad m => MonadPut' f s (Lazy.StateT (f s) m) where
---     putContext' = put
-
--- instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadPut' f s (Strict.RWST r w (f s) m) where
---     putContext' = put
-
--- instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadPut' f s (Lazy.RWST r w (f s) m) where
---     putContext' = put
-
--- modifyContext' :: MonadPut' f s m => (f s -> f s) -> m ()
--- modifyContext' f = do
---   s <- askContext'
---   putContext' $! f s

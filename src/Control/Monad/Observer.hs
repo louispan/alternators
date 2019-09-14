@@ -9,45 +9,30 @@ import Control.Monad.Reader
 
 -- | There is no functional dependency @m -> a@ so it allows multiple uses of
 -- Observer to observer different things in the one function.
-class Monad m => Observer a m where
+-- Use newtype wrappers or 'Tagged' to ensure unique @a@ in the monad stack.
+-- The main instance of 'Observer' is the 'ReaderT' instance which holds a function
+-- @a -> m ()@, ie not @a -> ReaderT m ()@ otherwise there will be a @ReaderT m ~ m@ compile error.
+-- This class is required because using 'Control.Monad.Context.MonadAsk' to emulate
+-- the same signature will result in instance resolution ambiguities
+-- since GHC doesn't know that the @m@ in the @(a -> m())@ is the same as the monad @m@.
+class Monad m => MonadObserver a m where
     askObserver :: m (a -> m ())
 
-instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, Observer a m) => Observer a (t m) where
+instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadObserver a m) => MonadObserver a (t m) where
     askObserver = lift $ (lift .) <$> askObserver
 
-instance {-# OVERLAPPABLE #-} Monad m => Observer a (ReaderT (a -> m ()) m) where
+instance {-# OVERLAPPABLE #-} Monad m => MonadObserver a (ReaderT (a -> m ()) m) where
     askObserver = (lift .) <$> ask
 
-observe :: Observer a m => a -> m ()
+type ObserverT a m = ReaderT (a -> m ()) m
+
+observe :: MonadObserver a m => a -> m ()
 observe a = askObserver >>= ($ a)
 
--- Commenting out as this is not as "neat"
--- -- | There is a functional dependency @m -> a@ to prevent ambiguity in overlapping instances.
--- -- This means there can only be one observer at a time for each unique @f@.
--- class Monad m => Observer' f a m | m -> a where
---     askObserver' :: m (f a -> m ())
-
--- instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, Observer' f a m) => Observer' f a (t m) where
---     askObserver' = lift $ (lift .) <$> askObserver'
-
--- instance {-# OVERLAPPABLE #-} Monad m => Observer' f a (ReaderT (f a -> m ()) m) where
---     askObserver' = (lift .) <$> ask
-
--- observe' :: Observer' f a m => f a -> m ()
--- observe' a = askObserver' >>= ($ a)
-
--- -- | 'runReaderT' that resolve ambiguity of @m@
--- runObserver' :: Monad m => ReaderT (f a -> m ()) m r -> (f a -> m ()) -> m r
--- runObserver' = runReaderT
-
 -- | 'runReaderT' that resolve ambiguity of @m@
-runObserver :: ReaderT (a -> m ()) m r -> (a -> m ()) -> m r
-runObserver = runReaderT
+runObserverT :: ObserverT a m r -> (a -> m ()) -> m r
+runObserverT = runReaderT
 
 -- | like 'fmap'ing the observed value
-reobserve :: Observer b m => (a -> b) -> ReaderT (a -> m ()) m r -> m r
-reobserve f m = runObserver m (observe . f)
-
--- -- | like 'fmap'ing the observed value
--- reobserve' :: Observer' f b m => (a -> f b) -> ReaderT (a -> m ()) m r -> m r
--- reobserve' f m = runObserver m (observe' . f)
+reobserve :: MonadObserver b m => (a -> b) -> ObserverT a m r -> m r
+reobserve f m = runObserverT m (observe . f)

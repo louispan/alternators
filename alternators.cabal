@@ -23,10 +23,9 @@ library
                        Control.Monad.Context
                        Control.Monad.Observer
                        Control.Monad.Trans.Extras
-                      --  Data.Function.Recompose
                        Data.Function.Extras
+                       Data.IORef.Extras
                        Data.Kind.Extras
-                      --  Data.Functor.Functor2
                        Data.Tagged.Extras
                        Data.AnyStableName
   build-depends:       base >= 4.7 && < 5
