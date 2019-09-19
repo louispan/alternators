@@ -27,7 +27,8 @@ library
                        Data.IORef.Extras
                        Data.Kind.Extras
                        Data.Tagged.Extras
-                       Data.AnyStableName
+                       System.Mem.AnyStableName
+                       GHC.Stack.Extras
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.6
                      , deepseq >= 1.4
