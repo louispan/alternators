@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -8,9 +9,9 @@ module GHC.Stack.Extras
 , withoutCallStack
 ) where
 
-import GHC.Stack
-import Data.String
 import qualified Data.List as L
+import Data.String
+import GHC.Stack
 
 -- Based on 'GHC.Stack.prettyCallstack'
 prettyCallStack' :: (Semigroup str, IsString str) => str -> [(String, SrcLoc)] -> Maybe str
