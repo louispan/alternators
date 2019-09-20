@@ -5,9 +5,13 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module GHC.Stack.Extras
-( module GHC.Stack
-, withoutCallStack
-) where
+    ( module GHC.Stack
+    , prettyCallStack'
+    , trimmedCallstack
+    , prettyCallSite'
+    , prettySrcLoc'
+    , withoutCallStack
+    ) where
 
 import qualified Data.List as L
 import Data.String

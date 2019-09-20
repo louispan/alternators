@@ -21,6 +21,7 @@ import Control.Monad.State.Strict as Strict
 class Monad m => MonadAsk r m where
     askContext :: m r
 
+-- | Any transformer on top of 'MonadAsk' is also a 'MonadAsk'
 instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadAsk r m) => MonadAsk r (t m) where
     askContext = lift askContext
 
