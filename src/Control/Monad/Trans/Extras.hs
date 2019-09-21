@@ -14,7 +14,6 @@ module Control.Monad.Trans.Extras where
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
-import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
 import Data.Maybe
 
