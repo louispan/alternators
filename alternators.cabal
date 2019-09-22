@@ -27,6 +27,7 @@ library
                        Data.IORef.Extras
                        Data.Kind.Extras
                        Data.Tagged.Extras
+                       ShowIO
                        System.Mem.AnyStableName
                        GHC.Stack.Extras
   build-depends:       base >= 4.7 && < 5
