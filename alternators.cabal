@@ -18,7 +18,6 @@ library
   hs-source-dirs:      src
   exposed-modules:
                        Control.Also
-                       Control.Monad.Bind
                        Control.Monad.Delegate
                        Control.Monad.Context
                        Control.Monad.Observer
@@ -27,9 +26,7 @@ library
                        Data.IORef.Extras
                        Data.Kind.Extras
                        Data.Tagged.Extras
-                       ShowIO
                        System.Mem.AnyStableName
-                       GHC.Stack.Extras
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.6
                      , deepseq >= 1.4
