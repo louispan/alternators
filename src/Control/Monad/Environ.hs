@@ -66,19 +66,19 @@ class MonadAsk p s m => MonadPut p s m | p m -> s where
 
 type MonadPut' s = MonadPut s s
 
-instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadPut p s m) => MonadPut p s (t m) where
+instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadPut p s m, Monad m) => MonadPut p s (t m) where
     putEnviron p = lift . putEnviron p
 
-instance {-# OVERLAPPABLE #-} (Monad m, MonadAsk p s m) => MonadPut p s (Strict.StateT s m) where
+instance {-# OVERLAPPABLE #-} (Monad m, MonadAsk p s (Strict.StateT s m)) => MonadPut p s (Strict.StateT s m) where
     putEnviron _ = put
 
-instance {-# OVERLAPPABLE #-} (Monad m, MonadAsk p s m) => MonadPut p s (Lazy.StateT s m) where
+instance {-# OVERLAPPABLE #-} (Monad m, MonadAsk p s (Lazy.StateT s m)) => MonadPut p s (Lazy.StateT s m) where
     putEnviron _ = put
 
-instance {-# OVERLAPPABLE #-} (Monoid w, Monad m, MonadAsk p s m) => MonadPut p s (Strict.RWST r w s m) where
+instance {-# OVERLAPPABLE #-} (Monoid w, Monad m, MonadAsk p s (Strict.RWST r w s m)) => MonadPut p s (Strict.RWST r w s m) where
     putEnviron _ = put
 
-instance {-# OVERLAPPABLE #-} (Monoid w, Monad m, MonadAsk p s m) => MonadPut p s (Lazy.RWST r w s m) where
+instance {-# OVERLAPPABLE #-} (Monoid w, Monad m, MonadAsk p s (Lazy.RWST r w s m)) => MonadPut p s (Lazy.RWST r w s m) where
     putEnviron _ = put
 
 -- | Using ScopedTypeVariables to specify the type of @s@ into 'askEnviron'
