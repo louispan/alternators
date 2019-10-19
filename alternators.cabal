@@ -19,7 +19,7 @@ library
   exposed-modules:
                        Control.Also
                        Control.Monad.Delegate
-                       Control.Monad.Context
+                       Control.Monad.Environ
                        Control.Monad.Observer
                        Control.Monad.Trans.Extras
                        Data.Function.Extras
