@@ -52,7 +52,7 @@ class Alternative m => SafeAlternative (m :: * -> *)
 -- | Any transformer on top of 'SafeAlternative' is also a 'SafeAlternative'
 instance {-# OVERLAPPABLE #-} (Alternative (t m), MonadTrans t, SafeAlternative m) => SafeAlternative (t m)
 
--- | The real instance that fufils the the 'SafeAlternative' constraint
+-- | The real instance that fulfills the the 'SafeAlternative' constraint
 instance {-# OVERLAPPABLE #-} Monad m => SafeAlternative (MaybeT m)
 
 -- | Anything except IO is a safe alternative instance
