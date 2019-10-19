@@ -25,9 +25,8 @@ import Control.Monad.State.Lazy as Lazy
 import Control.Monad.State.Strict as Strict
 import Data.Proxy
 
--- | like 'MonadReader' but with overlapping instances
--- Use newtype wrappers or 'Tagged' to ensure unique @r@ in the monad stack.
--- type family Environ (p :: k) (m :: * -> *) :: *
+-- | like 'MonadReader' but with overlapping instances.
+-- The 'Proxy' @p@ allows controlled inference of @p m -> r@.
 class Monad m => MonadAsk p r m | p m -> r where
     askEnviron :: Proxy p -> m r
 
@@ -58,7 +57,8 @@ instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk s s (Strict.RWST r
 instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk s s (Lazy.RWST r w s m) where
     askEnviron _ = get
 
--- | like 'MonadState' but with overlapping instances
+-- | like 'MonadState' but with overlapping instances.
+-- The 'Proxy' @p@ allows controlled inference of @p m -> s@.
 class MonadAsk p s m => MonadPut p s m | p m -> s where
     putEnviron :: Proxy p -> s -> m ()
     -- getEnviron :: m s

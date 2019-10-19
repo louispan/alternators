@@ -1,38 +1,64 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Control.Monad.Observer where
+module Control.Monad.Observer
+    (  module Data.Proxy
+    , MonadObserver(..)
+    , MonadObserver'
+    , ObserverT
+    , runObserverT
+    , observe
+    , observe'
+    , reobserve
+    , reobserve'
+    ) where
 
+import Control.Monad.Environ
 import Control.Monad.Reader
+import Data.Proxy
 
 -- | There is no functional dependency @m -> a@ so it allows multiple uses of
 -- Observer to observer different things in the one function.
--- Use newtype wrappers or 'Tagged' to ensure unique @a@ in the monad stack.
+-- The 'Proxy' @p@ allows controlled inference of @p m -> s@.
 -- The main instance of 'Observer' is the 'ReaderT' instance which holds a function
 -- @a -> m ()@, ie not @a -> ReaderT m ()@ otherwise there will be a @ReaderT m ~ m@ compile error.
--- This class is required because using 'Control.Monad.Context.MonadAsk' to emulate
--- the same signature will result in instance resolution ambiguities
--- since GHC doesn't know that the @m@ in the @(a -> m())@ is the same as the monad @m@.
-class Monad m => MonadObserver a m where
-    askObserver :: m (a -> m ())
+class Monad m => MonadObserver p a m | p m -> a where
+    askObserver :: Proxy p -> m (a -> m ())
 
-instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadObserver a m) => MonadObserver a (t m) where
-    askObserver = lift $ (lift .) <$> askObserver
+type MonadObserver' a = MonadObserver a a
 
-instance {-# OVERLAPPABLE #-} Monad m => MonadObserver a (ReaderT (a -> m ()) m) where
-    askObserver = (lift .) <$> ask
+instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadObserver p a m) => MonadObserver p a (t m) where
+    askObserver p = lift $ (lift .) <$> askObserver p
+
+instance {-# OVERLAPPABLE #-} Monad m => MonadObserver p a (ReaderT (a -> m ()) m) where
+    askObserver _ = (lift .) <$> ask
 
 type ObserverT a m = ReaderT (a -> m ()) m
-
-observe :: MonadObserver a m => a -> m ()
-observe a = askObserver >>= ($ a)
 
 -- | 'runReaderT' that resolve ambiguity of @m@
 runObserverT :: ObserverT a m r -> (a -> m ()) -> m r
 runObserverT = runReaderT
 
+-- askObserver :: forall a m. MonadObserver a m => Proxy a -> m (a -> m ())
+-- askObserver _ = askEnviron @(a -> m ()) Proxy
+
+observe :: forall p a m. MonadObserver p a m => Proxy p -> a -> m ()
+observe p a = askObserver p >>= ($ a)
+
+observe' :: forall a m. MonadObserver' a m => a -> m ()
+observe' = observe @a Proxy
+
 -- | like 'fmap'ing the observed value
-reobserve :: MonadObserver b m => (a -> b) -> ObserverT a m r -> m r
-reobserve f m = runObserverT m (observe . f)
+reobserve :: forall p b a r m. MonadObserver p b m => Proxy p -> (a -> b) -> ObserverT a m r -> m r
+reobserve p f m = runObserverT m (observe p . f)
+
+reobserve' :: forall b a r m. MonadObserver' b m => (a -> b) -> ObserverT a m r -> m r
+reobserve' = reobserve @b Proxy
