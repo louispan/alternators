@@ -67,6 +67,10 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
             -- Right () -> pure ()
             _ -> pure ()
 
+-- | 'delegate' handling of two different things
+delegate2 :: MonadDelegate m => ((a -> m (), b -> m ()) -> m ()) -> m (Either a b)
+delegate2 f = delegate $ \fire -> f (fire . Left, fire . Right)
+
 -- | Only handle with given monad, and ignore anything else.
 -- @forall@ so @TypeApplications@ can be used to specify the type of @a@.
 -- It pretends to fire @a@ but never does.
