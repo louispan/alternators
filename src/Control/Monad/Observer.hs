@@ -3,8 +3,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -15,12 +15,15 @@ module Control.Monad.Observer
     , MonadObserver'
     , ObserverT
     , runObserverT
+    , unobserve
+    , unobserve2
     , observe
     , observe'
     , reobserve
     , reobserve'
     ) where
 
+import Control.Monad.Delegate
 import Control.Monad.Environ
 import Control.Monad.Reader
 import Data.Proxy
@@ -47,8 +50,11 @@ type ObserverT a m = ReaderT (a -> m ()) m
 runObserverT :: ObserverT a m r -> (a -> m ()) -> m r
 runObserverT = runReaderT
 
--- askObserver :: forall a m. MonadObserver a m => Proxy a -> m (a -> m ())
--- askObserver _ = askEnviron @(a -> m ()) Proxy
+unobserve :: MonadDelegate m => ObserverT a m () -> m a
+unobserve m = delegate $ \fire -> runObserverT m fire
+
+unobserve2 :: MonadDelegate m => ObserverT a m r -> m (Either r a)
+unobserve2 m = delegate2 $ \(f, g) -> runObserverT m g >>= f
 
 observe :: forall p a m. MonadObserver p a m => Proxy p -> a -> m ()
 observe p a = askObserver p >>= ($ a)
@@ -57,8 +63,8 @@ observe' :: forall a m. MonadObserver' a m => a -> m ()
 observe' = observe @a Proxy
 
 -- | like 'fmap'ing the observed value
-reobserve :: forall p b a r m. MonadObserver p b m => Proxy p -> (a -> b) -> ObserverT a m r -> m r
+reobserve :: forall p a b r m. MonadObserver p b m => Proxy p -> (a -> b) -> ObserverT a m r -> m r
 reobserve p f m = runObserverT m (observe p . f)
 
-reobserve' :: forall b a r m. MonadObserver' b m => (a -> b) -> ObserverT a m r -> m r
+reobserve' :: forall a b r m. MonadObserver' b m => (a -> b) -> ObserverT a m r -> m r
 reobserve' = reobserve @b Proxy
