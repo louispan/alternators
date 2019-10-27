@@ -23,22 +23,22 @@ import Data.Maybe
 evalMaybeT :: Functor m => MaybeT m a -> a -> m a
 evalMaybeT m a = (fromMaybe a) <$> (runMaybeT m)
 
+-- -- | Use 'Just' froma Maybe' value using 'Alternative'
+guardJust :: (Monad m, Alternative m) => Maybe a -> m a
+guardJust = maybe empty pure
+
 -- | mtl-like use of 'MaybeT' for any transformer stack that is an instance
 -- of 'Alternative'. Can be used instead of 'MaybeT'.
-fromJustM :: (Monad m, Alternative m) => m (Maybe a) -> m a
-fromJustM = (>>= maybe empty pure)
-
--- -- | Use 'Just' froma Maybe' value using 'Alternative'
--- whenJust :: Alternative f => Maybe a -> f a
--- whenJust = maybe empty pure
+guardJustM :: (Monad m, Alternative m) => m (Maybe a) -> m a
+guardJustM = (>>= guardJust)
 
 -- | Use this type synonym whenever you want both 'MonadIO' and 'Alternative' whilst
 -- ensuring concrete transformer stacks use a MaybeT and not the IO for the 'Alternative'.
 type AlternativeIO m = (MonadIO m, SafeAlternative m)
 
--- | Safely combined 'liftIO' and 'fromJustM', by adding the 'AlternativeIO' constraint
-fromJustIO :: AlternativeIO m => IO (Maybe a) -> m a
-fromJustIO = fromJustM . liftIO
+-- | Safely combined 'liftIO' and 'guardJustM', by adding the 'AlternativeIO' constraint
+guardJustIO :: AlternativeIO m => IO (Maybe a) -> m a
+guardJustIO = guardJustM . liftIO
 
 -- | The IO instance of Applicative and MonadPlus is dangerous as it it too easy
 -- to accidently omit a MaybeT in the transformer stack and introduce exceptions.
