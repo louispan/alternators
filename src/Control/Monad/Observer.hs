@@ -10,7 +10,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Control.Monad.Observer
-    (  module Data.Proxy
+    ( module Data.Proxy
     , MonadObserver(..)
     , MonadObserver'
     , ObserverT
@@ -47,13 +47,13 @@ instance {-# OVERLAPPABLE #-} Monad m => MonadObserver p a (ReaderT (a -> m ()) 
 type ObserverT a m = ReaderT (a -> m ()) m
 
 -- | 'runReaderT' that resolve ambiguity of @m@
-runObserverT :: ObserverT a m r -> (a -> m ()) -> m r
+runObserverT :: forall a r m. ObserverT a m r -> (a -> m ()) -> m r
 runObserverT = runReaderT
 
-unobserve :: MonadDelegate m => ObserverT a m () -> m a
+unobserve :: forall a m. MonadDelegate m => ObserverT a m () -> m a
 unobserve m = delegate $ \fire -> runObserverT m fire
 
-unobserve2 :: MonadDelegate m => ObserverT a m r -> m (Either r a)
+unobserve2 :: forall a r m. MonadDelegate m => ObserverT a m r -> m (Either r a)
 unobserve2 m = delegate2 $ \(f, g) -> runObserverT m g >>= f
 
 observe :: forall p a m. MonadObserver p a m => Proxy p -> a -> m ()
