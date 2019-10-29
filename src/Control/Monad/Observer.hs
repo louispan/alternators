@@ -70,6 +70,7 @@ unobserve :: forall a m. MonadDelegate m => ObserverT a m () -> m a
 unobserve m = delegate $ \fire -> runObserverT m fire
 
 -- | Convenient version of 'unobserve' for the case where event is @Tagged tag a@
+-- but the tag is automatically unwrapped when used.
 unobserveTagged :: forall tag a m. MonadDelegate m => ObserverT (Tagged tag a) m () -> m a
 unobserveTagged m = delegate $ \fire -> runObserverT m (fire . untag' @tag)
 
@@ -78,6 +79,7 @@ unobserve2 :: forall a r m. MonadDelegate m => ObserverT a m r -> m (Either r a)
 unobserve2 m = delegate2 $ \(f, g) -> runObserverT m g >>= f
 
 -- | Convenient version of 'unobserve2' for the case where event is @Tagged tag a@
+-- but the tag is automatically unwrapped when used.
 unobserveTagged2 :: forall tag a r m. MonadDelegate m => ObserverT (Tagged tag a) m r -> m (Either r a)
 unobserveTagged2 m = delegate2 $ \(f, g) -> runObserverT @(Tagged tag a) m (g . untag' @tag) >>= f
 
@@ -110,6 +112,7 @@ reobserve' :: forall a b r m. MonadObserver' b m => (a -> b) -> ObserverT a m r 
 reobserve' = reobserveP @b Proxy
 
 -- | 'reobserveP' for the case where event is @Tagged tag a@
+-- but the tag is automatically unwrapped when used.
 reobserveTagged :: forall tagA tagB a b r m. MonadObserver' (Tagged tagB b) m => (a -> b) -> ObserverT (Tagged tagA a) m r -> m r
 reobserveTagged f = reobserve' @(Tagged tagA a) @(Tagged tagB b) (Tagged @tagB . f . untag' @tagA)
 
