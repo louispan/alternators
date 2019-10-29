@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -6,7 +7,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -16,7 +16,7 @@ module Control.Monad.Observer
     , MonadObserver'
     , ObserverT
     , runObserverT
-    , runObserverTagged
+    -- , runObserverTagged
     , unobserve
     , unobserveTagged
     , unobserve2
@@ -24,7 +24,7 @@ module Control.Monad.Observer
     , observeP
     , observe
     , observe'
-    , observeTagged
+    -- , observeTagged
     , reobserveP
     , reobserve
     , reobserve'
@@ -59,11 +59,11 @@ type ObserverT a m = ReaderT (a -> m ()) m
 runObserverT :: forall a r m. ObserverT a m r -> (a -> m ()) -> m r
 runObserverT = runReaderT
 
--- | Convenient version of 'runObserverT' for the case where event is @Tagged tag a@
--- but the tag is automatically unwrapped when used.
--- Use with @TypeApplications@ to specify @tag@
-runObserverTagged :: forall tag a r m. ObserverT (Tagged tag a) m r -> (a -> m ()) -> m r
-runObserverTagged m f = runReaderT m (f . untag' @tag)
+-- -- | Convenient version of 'runObserverT' for the case where event is @Tagged tag a@
+-- -- but the tag is automatically unwrapped when used.
+-- -- Use with @TypeApplications@ to specify @tag@
+-- runObserverTagged :: forall tag a r m. ObserverT (Tagged tag a) m r -> (a -> m ()) -> m r
+-- runObserverTagged m f = runReaderT m (f . untag' @tag)
 
 -- | Convert from an @ObserverT a m ()@ to a 'MonadDelegate'
 unobserve :: forall a m. MonadDelegate m => ObserverT a m () -> m a
@@ -71,7 +71,7 @@ unobserve m = delegate $ \fire -> runObserverT m fire
 
 -- | Convenient version of 'unobserve' for the case where event is @Tagged tag a@
 unobserveTagged :: forall tag a m. MonadDelegate m => ObserverT (Tagged tag a) m () -> m a
-unobserveTagged m = delegate $ \fire -> runObserverTagged @tag m fire
+unobserveTagged m = delegate $ \fire -> runObserverT m (fire . untag' @tag)
 
 -- | Convert from an 'ObserverT a m ()' to a 'MonadDelegate', delegating both the @r@ and @a@
 unobserve2 :: forall a r m. MonadDelegate m => ObserverT a m r -> m (Either r a)
@@ -79,7 +79,7 @@ unobserve2 m = delegate2 $ \(f, g) -> runObserverT m g >>= f
 
 -- | Convenient version of 'unobserve2' for the case where event is @Tagged tag a@
 unobserveTagged2 :: forall tag a r m. MonadDelegate m => ObserverT (Tagged tag a) m r -> m (Either r a)
-unobserveTagged2 m = delegate2 $ \(f, g) -> runObserverTagged @tag m g >>= f
+unobserveTagged2 m = delegate2 $ \(f, g) -> runObserverT @(Tagged tag a) m (g . untag' @tag) >>= f
 
 -- | Fire an event @a@ where the 'MonadObserver' type ambiguity is resolved by the given 'Proxy' @p@
 observeP :: forall p a m. MonadObserver p a m => Proxy p -> a -> m ()
@@ -93,9 +93,9 @@ observe a = observeP @p Proxy a
 observe' :: forall a m. MonadObserver' a m => a -> m ()
 observe' = observeP @a Proxy
 
--- | Convenient version of 'observe'' for the case where event is @Tagged tag a@
-observeTagged :: forall tag a m. MonadObserver' (Tagged tag a) m => a -> m ()
-observeTagged a = observe' (Tagged @tag a)
+-- -- | Convenient version of 'observe'' for the case where event is @Tagged tag a@
+-- observeTagged :: forall tag a m. MonadObserver' (Tagged tag a) m => a -> m ()
+-- observeTagged a = observe' (Tagged @tag a)
 
 -- | like 'fmap'ing the observed value where the 'MonadObserver' type ambiguity is resolved by the given 'Proxy' @p@
 reobserveP :: forall p a b r m. MonadObserver p b m => Proxy p -> (a -> b) -> ObserverT a m r -> m r
