@@ -16,18 +16,18 @@ module Control.Monad.Environ
     , MonadAsk'
     , askEnviron
     , askEnviron'
-    , askEnvironTag
+    , askEnvironTagged
     , localEnviron
     , localEnviron'
-    , localEnvironTag
+    , localEnvironTagged
     , MonadPut(..)
     , MonadPut'
     , putEnviron
     , putEnviron'
-    , putEnvironTag
+    , putEnvironTagged
     , modifyEnviron
     , modifyEnviron'
-    , modifyEnvironTag
+    , modifyEnvironTagged
     ) where
 
 import Control.Monad.Morph
@@ -66,8 +66,8 @@ askEnviron' = askEnvironP @r Proxy
 -- | Convenient version 'askEnvironP' for the case where @p@ is @Tagged tag r@
 -- but the tag is automatically unwrapped when used.
 -- Use with @TypeApplications@ to specify @tag@
-askEnvironTag :: forall tag r m. MonadAsk' (Tagged tag r) m => m r
-askEnvironTag = (untag' @tag) <$> askEnvironP @(Tagged tag r) Proxy
+askEnvironTagged :: forall tag r m. MonadAsk' (Tagged tag r) m => m r
+askEnvironTagged = (untag' @tag) <$> askEnvironP @(Tagged tag r) Proxy
 
 -- | 'localEnvironP' without 'Proxy'.
 -- Use with @TypeApplications@ to specify @p@
@@ -82,8 +82,8 @@ localEnviron' = localEnvironP @r Proxy
 -- | Convenient version 'localEnvironP' for the case where @p@ is @Tagged tag r@
 -- but the tag is automatically unwrapped when used.
 -- Use with @TypeApplications@ to specify @tag@
-localEnvironTag :: forall tag r a m. MonadAsk' (Tagged tag r) m => (r -> r) -> m a -> m a
-localEnvironTag f = localEnvironP @(Tagged tag r) Proxy (Tagged @tag . f . untag' @tag)
+localEnvironTagged :: forall tag r a m. MonadAsk' (Tagged tag r) m => (r -> r) -> m a -> m a
+localEnvironTagged f = localEnvironP @(Tagged tag r) Proxy (Tagged @tag . f . untag' @tag)
 
 -- | Any transformer on top of 'MonadAsk' is also a 'MonadAsk'
 instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MFunctor t, MonadAsk p r m) => MonadAsk p r (t m) where
@@ -142,8 +142,8 @@ putEnviron' = putEnvironP @s Proxy
 -- | Convenient version 'putEnvironP' for the case where @p@ is @Tagged tag r@
 -- but the tag is automatically unwrapped when used.
 -- Use with @TypeApplications@ to specify @tag@
-putEnvironTag :: forall tag s m. MonadPut' (Tagged tag s) m => s -> m ()
-putEnvironTag s = putEnvironP @(Tagged tag s) Proxy (Tagged @tag s)
+putEnvironTagged :: forall tag s m. MonadPut' (Tagged tag s) m => s -> m ()
+putEnvironTagged s = putEnvironP @(Tagged tag s) Proxy (Tagged @tag s)
 
 -- | Requires 'MFunctor' for the 'MonadAsk' transformer instance
 instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MFunctor t, MonadPut p s m, Monad m) => MonadPut p s (t m) where
@@ -182,5 +182,5 @@ modifyEnviron' = modifyEnvironP @s Proxy
 -- | Convenient version 'modifyEnvironP' for the case where @p@ is @Tagged tag r@
 -- but the tag is automatically unwrapped when used.
 -- Use with @TypeApplications@ to specify @tag@
-modifyEnvironTag :: forall tag s m. MonadPut' (Tagged tag s) m => (s -> s) -> m ()
-modifyEnvironTag f = modifyEnvironP @(Tagged tag s) Proxy (Tagged @tag . f . untag' @tag)
+modifyEnvironTagged :: forall tag s m. MonadPut' (Tagged tag s) m => (s -> s) -> m ()
+modifyEnvironTagged f = modifyEnvironP @(Tagged tag s) Proxy (Tagged @tag . f . untag' @tag)
