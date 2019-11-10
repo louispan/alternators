@@ -24,7 +24,7 @@ import Control.Monad.Trans.Reader
 -- @
 -- id = \m -> delegate $ \fire -> m `dischargedBy` fire
 -- @
-class MonadCont m => MonadDelegate m where
+class Monad m => MonadDelegate m where
 
     -- | Delegates the handing of @a@ to a continuation.
     -- The intuition is that delegate allows deferring subsequent binds
@@ -32,25 +32,24 @@ class MonadCont m => MonadDelegate m where
     -- The "inverse" of 'delegate' is 'dischargedBy' which looks is a bit like a 'bind'.
     delegate :: ((a -> m ()) -> m ()) -> m a
 
-    -- | This signature looks a bit like 'bind'.
+    -- | This signature looks a bit like 'flip' 'bind'.
     -- Apply handler to @m a @ and result in a monad that will
     -- fire @()@ at most once.
-    -- Therefore, subsequent 'bind' will be guaranteed to run at most once.
-    -- Each time the input monad is handled, it is is reduced to @m ()@
+    -- The input monad is fired and handled one after the other.
+    -- as if the input monad is reduced to @m ()@
     -- and then 'bind'ed to the next handing of the input monad.
-    -- That is, the input monadis fired and handled one after the other.
-    dischargedBy :: m a -> (a -> m ()) -> m ()
+    discharges :: (a -> m ()) -> m a -> m ()
 
 infixl 1 `dischargedBy` -- like `(>>=)`
 infixr 1 `discharges` -- like `(=<<)`
 
-discharges :: MonadDelegate m => (a -> m ()) -> m a -> m ()
-discharges = flip dischargedBy
+dischargedBy :: MonadDelegate m => m a -> (a -> m ()) -> m ()
+dischargedBy = flip discharges
 
 -- | Instance that does real work using continuations
 instance Monad m => MonadDelegate (ContT () m) where
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
-    dischargedBy (ContT g) f = lift $ g (evalContT . f)
+    discharges f (ContT g) = lift $ g (evalContT . f)
     -- id m = delegate $ \fire -> m `dischargedBy` fire
     -- id m `should equal` ContT $ \k -> m' k
     -- m' = runContT m :: (a -> m ()) -> m ()
@@ -70,15 +69,15 @@ instance Monad m => MonadDelegate (ContT () m) where
 -- | Passthrough instance
 instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
-    dischargedBy (IdentityT g) f = lift $ g `dischargedBy` (runIdentityT . f)
+    discharges f (IdentityT m) = lift $ (runIdentityT . f) `discharges` m
 
 -- | Passthrough instance
 instance (MonadDelegate m) => MonadDelegate (ReaderT env m) where
     delegate f = ReaderT $ \env -> delegate $ \k -> (`runReaderT` env) $ f (lift . k)
-    dischargedBy (ReaderT g) f = ReaderT $ \r -> (g r) `dischargedBy` ((`runReaderT` r) . f)
+    discharges f (ReaderT g) = ReaderT $ \r -> ((`runReaderT` r) . f) `discharges` (g r)
 
 -- | Passthrough instance
-instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
+instance (MonadCont m, MonadDelegate m) => MonadDelegate (MaybeT m) where
     -- f :: ((a -> MaybeT m ()) -> MaybeT m ())
     delegate f = MaybeT . delegate $ \k -> do -- k :: (Maybe a -> m ())
         -- Use the given @f@ handler with the 'Just' case of @k@
@@ -92,8 +91,8 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
 
     -- dischargedBy :: MaybeT m a -> (a -> MaybeT m ()) -> MaybeT m ()
     -- f :: (a -> MaybeT m ()
-    dischargedBy (MaybeT g) f = MaybeT $ do
-        -- Make sure we only call fire once
+    discharges f (MaybeT g) = MaybeT $
+        -- Make sure we only call fire once by using 'callCC'
         -- callCC :: ((Maybe () -> m ()) -> m (Maybe ()) -> m (Maybe ())
         -- dischargedBy :: m (Maybe a) -> (Maybe a -> m ()) -> m ()
         callCC $ \escape -> Just <$> dischargedBy g (f' escape)
@@ -110,7 +109,7 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
                 _ -> pure ()
 
 -- | Passthrough instance
-instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
+instance (MonadCont m, MonadDelegate m) => MonadDelegate (ExceptT e m) where
     -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
     delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
         -- Use the given @f@ handler with the 'Right' case of @k@
@@ -122,8 +121,8 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
             -- Right () -> pure ()
             _ -> pure ()
 
-    dischargedBy (ExceptT g) f = ExceptT $ do
-        -- Make sure we only call fire once
+    discharges f (ExceptT g) = ExceptT $
+        -- Make sure we only call fire once by using 'callCC'
         callCC $ \escape -> Right <$> dischargedBy g (f' escape)
       where
         f' escape (Left e) = escape (Left e)
@@ -146,7 +145,6 @@ delegate2 f = delegate $ \fire -> f (fire . Left, fire . Right)
 -- This is like @throw@ that exits event handling to a different control scope.
 finish :: forall a m. MonadDelegate m => m () -> m a
 finish = delegate . const
-
 
 -- -- | Convert two handler to a monad that may fire two possibilities
 -- -- The inverse is 'bindBoth'.
