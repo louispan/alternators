@@ -18,7 +18,6 @@ Tested-With:         GHC == 8.6.5
 library
   hs-source-dirs:      src
   exposed-modules:
-                       Control.Also
                        Control.Monad.Delegate
                        Control.Monad.Environ
                        Control.Monad.Observer
