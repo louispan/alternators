@@ -3,9 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Control.Monad.Delegate where
 
@@ -20,64 +18,74 @@ import Control.Monad.Trans.Reader
 -- @MonadDelegate m => m a@ is a monad that may fire an event @a@ zero, once or many times.
 -- and monadic binding with @a -> m b@ is handling the @a@ to firing a @b@ event
 -- for each time the @a@ is fires.
--- Law:
--- @
--- id = \m -> delegate $ \fire -> m `dischargedBy` fire
--- @
+--
+-- This basically requires a 'ContT' or 'Control.Monad.AContT' in the transformer stack.
+-- Consider using a @AContT r (MaybeT m)@ in your transformer stack as it allows an 'Alternative' instance.
 class Monad m => MonadDelegate m where
 
     -- | Delegates the handing of @a@ to a continuation.
     -- The intuition is that delegate allows deferring subsequent binds
     -- to code defined later.
-    -- The "inverse" of 'delegate' is 'dischargedBy' which looks is a bit like a 'bind'.
+    -- The "inverse" of 'delegate' is 'dischargeBy' which looks is a bit like a 'bind'.
     delegate :: ((a -> m ()) -> m ()) -> m a
 
+
+-- | Adds in inverse operation to 'delegate'.
+-- Using 'delegate' results in a monad that may fire zero, once, or many times
+-- Using 'discharge' results in a monad that is guaranteed to fire unit once.
+--
+-- Law:
+-- @
+-- m = delegate $ \fire -> m `dischargeBy` fire
+-- @
+class MonadDelegate m => MonadDischarge m where
     -- | This signature looks a bit like 'flip' 'bind'.
     -- Apply handler to @m a @ and result in a monad that will
     -- fire @()@ at most once.
     -- The input monad is fired and handled one after the other.
     -- as if the input monad is reduced to @m ()@
     -- and then 'bind'ed to the next handing of the input monad.
-    discharges :: (a -> m ()) -> m a -> m ()
+    -- This results in a monad that is guaranteed to fire unit once.
+    discharge :: (a -> m ()) -> m a -> m ()
 
-infixl 1 `dischargedBy` -- like `(>>=)`
-infixr 1 `discharges` -- like `(=<<)`
+infixl 1 `dischargeBy` -- like `(>>=)`
+infixr 1 `discharge` -- like `(=<<)`
 
-dischargedBy :: MonadDelegate m => m a -> (a -> m ()) -> m ()
-dischargedBy = flip discharges
+dischargeBy :: MonadDischarge m => m a -> (a -> m ()) -> m ()
+dischargeBy = flip discharge
+
+-- -- | collect all the times the input monad fires into a list.
+-- -- Does not fire an empty list.
+-- dischargeList :: (MonadDelegate m, MonadIO m) => m a -> m [a]
+-- dischargeList m = do
+--     v <- liftIO $ newIORef (DL.empty)
+--     let f a = liftIO $ atomicModifyIORef v (\b -> (b `DL.snoc` a, ()))
+--     discharge f m
+--     liftIO $ DL.toList <$> readIORef v
 
 -- | Instance that does real work using continuations
 instance Monad m => MonadDelegate (ContT () m) where
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
-    discharges f (ContT g) = lift $ g (evalContT . f)
-    -- id m = delegate $ \fire -> m `dischargedBy` fire
-    -- id m `should equal` ContT $ \k -> m' k
-    -- m' = runContT m :: (a -> m ()) -> m ()
-    -- ContT $ \k -> evalContT $ f (lift . k)
-    -- k :: a -> m ())
-    -- f = lift $ m' (evalContT . fire)
-    -- fire = (lift . k) -- lift from m () -> ContT () m ()
-    -- fire :: a -> ContT () m ()
-    -- ContT $ \k -> evalContT $ lift $ m' (evalContT . lift . k)
-    -- ContT (\z -> m >>= z)
-    -- evalContT . lift = id
-    -- ContT $ \k -> evalContT $ lift $ m' (id . k)
-    -- ContT $ \k -> evalContT $ lift $ m' k
-    -- ContT $ \k -> m' k
-    -- `equals` id m
+
+instance Monad m => MonadDischarge (ContT () m) where
+    discharge f (ContT g) = lift $ g (evalContT . f)
 
 -- | Passthrough instance
 instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
-    discharges f (IdentityT m) = lift $ (runIdentityT . f) `discharges` m
+
+instance (MonadDischarge m) => MonadDischarge (IdentityT m) where
+    discharge f (IdentityT m) = lift $ (runIdentityT . f) `discharge` m
 
 -- | Passthrough instance
 instance (MonadDelegate m) => MonadDelegate (ReaderT env m) where
     delegate f = ReaderT $ \env -> delegate $ \k -> (`runReaderT` env) $ f (lift . k)
-    discharges f (ReaderT g) = ReaderT $ \r -> ((`runReaderT` r) . f) `discharges` (g r)
 
--- | Passthrough instance
-instance (MonadCont m, MonadDelegate m) => MonadDelegate (MaybeT m) where
+instance (MonadDischarge m) => MonadDischarge (ReaderT env m) where
+    discharge f (ReaderT g) = ReaderT $ \r -> ((`runReaderT` r) . f) `discharge` (g r)
+
+-- | There is no instance of 'MonadDischarge' for 'MaybeT'
+instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
     -- f :: ((a -> MaybeT m ()) -> MaybeT m ())
     delegate f = MaybeT . delegate $ \k -> do -- k :: (Maybe a -> m ())
         -- Use the given @f@ handler with the 'Just' case of @k@
@@ -89,26 +97,7 @@ instance (MonadCont m, MonadDelegate m) => MonadDelegate (MaybeT m) where
             -- Just () -> pure ()
             _ -> pure ()
 
-    -- dischargedBy :: MaybeT m a -> (a -> MaybeT m ()) -> MaybeT m ()
-    -- f :: (a -> MaybeT m ()
-    discharges f (MaybeT g) = MaybeT $
-        -- Make sure we only call fire once by using 'callCC'
-        -- callCC :: ((Maybe () -> m ()) -> m (Maybe ()) -> m (Maybe ())
-        -- dischargedBy :: m (Maybe a) -> (Maybe a -> m ()) -> m ()
-        callCC $ \escape -> Just <$> dischargedBy g (f' escape)
-      where
-        -- f' :: Maybe a -> m ()
-        f' escape Nothing = escape Nothing
-        f' escape (Just a) = go escape $ f a
-        -- go :: (Maybe () -> m (Maybe ())) -> MaybeT m () -> m ()
-        go escape (MaybeT m) = do
-            ma <- m
-            case ma of
-                Nothing -> escape Nothing -- need to prevent subsequent fires
-                -- Just () -> pure ()
-                _ -> pure ()
-
--- | Passthrough instance
+-- | There is no instance of 'MonadDischarge' for 'ExceptT'
 instance (MonadCont m, MonadDelegate m) => MonadDelegate (ExceptT e m) where
     -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
     delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
@@ -120,19 +109,6 @@ instance (MonadCont m, MonadDelegate m) => MonadDelegate (ExceptT e m) where
             Left e -> k (Left e)
             -- Right () -> pure ()
             _ -> pure ()
-
-    discharges f (ExceptT g) = ExceptT $
-        -- Make sure we only call fire once by using 'callCC'
-        callCC $ \escape -> Right <$> dischargedBy g (f' escape)
-      where
-        f' escape (Left e) = escape (Left e)
-        f' escape (Right a) = go escape $ f a
-        go escape (ExceptT m) = do
-            ma <- m
-            case ma of
-                (Left e) -> escape (Left e) -- need to prevent subsequent fires
-                -- Right () -> pure ()
-                _ -> pure ()
 
 -- | 'delegate' handling of two different things
 delegate2 :: MonadDelegate m => ((a -> m (), b -> m ()) -> m ()) -> m (Either a b)
@@ -177,3 +153,6 @@ finish = delegate . const
 --     case ma of
 --         Nothing -> pure ()
 --         Just a -> fire a
+
+
+

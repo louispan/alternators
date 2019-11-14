@@ -1,117 +1,251 @@
-{-# LANGUAGE DataKinds #-}
-
 module Main where
 
-import Control.Monad.Bind
-import Data.Proxy
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Delegate
+import Control.Monad.Except
+import Control.Monad.Trans.ACont
+import Control.Monad.Trans.Cont
+import Control.Monad.Trans.Extras
+import Data.IORef
+import Test.Hspec
 
 main :: IO ()
-main = pure ()
+main = hspec spec
 
-m1 :: IO (Proxy "1")
-m1 = pure Proxy
+basic :: MonadDelegate m => m String
+basic = delegate $ \fire -> do
+        fire "hello"
+        fire "world"
+        fire "bye"
 
-m2 :: IO (Proxy "2")
-m2 = pure Proxy
+spec :: Spec
+spec = do
+    let testBasic runM m expected = do
+            v <- newIORef []
+            void $ runM $ do
+                a <- m
+                -- This happens once for every @a@
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` "end": expected
 
-m3 :: IO (Proxy "3")
-m3 = pure Proxy
+        testDelegate runM m = do
+            it "delegate allows firing multiple times" $ do
+                testBasic runM m ["bye", "world", "hello"]
 
-m4 :: IO (Proxy "4")
-m4 = pure Proxy
+        testDischarge runM m = do
+            it "discharge reduces it back to only firing once, even if it does not fire" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    let f a = liftIO $ modifyIORef v (a :)
+                    discharge f (delegate $ \_ -> pure ())
+                    -- This only happens once
+                    liftIO $ modifyIORef v ("test" :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end", "test"]
 
-m5 :: IO (Proxy "5")
-m5 = pure Proxy
+            it "discharge reduces it back to only firing once" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    let f a = liftIO $ modifyIORef v (a :)
+                    discharge f m
+                    -- This only happens once
+                    liftIO $ modifyIORef v ("test" :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end", "test"] <> ["bye", "world", "hello"]
 
-m6 :: IO (Proxy "6")
-m6 = pure Proxy
+            it "delegate + discharge = id" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    a <- delegate $ \fire -> discharge fire m
+                    -- This happens once for every @a@
+                    liftIO $ modifyIORef v (a :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end"] <> ["bye", "world", "hello"]
 
-m7 :: IO (Proxy "7")
-m7 = pure Proxy
+            it "delegate + discharge = id (2)" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    a <- delegate $ \fire -> discharge fire (delegate $ \_ -> pure ())
+                    -- This happens once for every @a@
+                    liftIO $ modifyIORef v (a :)
+                    liftIO $ modifyIORef v ("never" :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end"]
 
-m8 :: IO (Proxy "8")
-m8 = pure Proxy
+        testDelegateAlternative runM m = do
+            it "delegate allows firing with failure1" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    a <- delegate $ \fire -> do
+                        fire "a"
+                        fire "b"
+                        void $ empty
+                        m >>= fire
+                    -- This happens once for every @a@
+                    liftIO $ modifyIORef v (a :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end", "b", "a"]
 
-m9 :: IO (Proxy "9")
-m9 = pure Proxy
+            it "delegate allows firing with failure0" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    a <- delegate $ \fire -> do
+                        void $ empty
+                        m >>= fire
+                    -- This happens once for every @a@
+                    liftIO $ modifyIORef v (a :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end"]
 
-m10 :: IO (Proxy "10")
-m10 = pure Proxy
 
-f1 :: Proxy "1" -> IO ()
-f1 _ = pure ()
+    describe "Alternative: Monoid: empty" $ do
+        it "empty" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) empty []
 
-f2 :: Proxy "1" -> Proxy "2" -> IO ()
-f2 _ _ = pure ()
+    describe "Alternative: Monoid: right empty" $ do
+        testDelegate ((`evalMaybeT` ()) . evalAContT) (basic <|> empty)
 
-f3 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> IO ()
-f3 _ _ _ = pure ()
+    describe "Alternative: Monoid: left empty" $ do
+        testDelegate ((`evalMaybeT` ()) . evalAContT) (empty <|> basic)
 
-f4 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> IO ()
-f4 _ _ _ _ = pure ()
+    describe "Alternative" $ do
+        it "pure foo <|> basic = pure foo" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) (pure "foo" <|> basic) ["foo"]
 
-f5 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> IO ()
-f5 _ _ _ _ _ = pure ()
+    describe "Alternative: basic <|> pure foo = basic" $ do
+        testDelegate ((`evalMaybeT` ()) . evalAContT) (basic <|> pure "foo")
 
-f6 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> IO ()
-f6 _ _ _ _ _ _ = pure ()
+    describe "Alternative:  Right Zero. m *> empty = empty" $ do
+        it "right empty" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) (basic *> empty) []
 
-f7 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> IO ()
-f7 _ _ _ _ _ _ _ = pure ()
+    describe "Alternative: left distribution: a <|> b >>= k = (a >>= k) <|> (b >>= k)" $ do
+        it "right mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) ((basic <|> empty) >>= \a -> pure (a <> a))
+                ["byebye", "worldworld", "hellohello"]
 
-f8 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> Proxy "8" -> IO ()
-f8 _ _ _ _ _ _ _ _ = pure ()
+        it "left mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) ((empty <|> basic) >>= \a -> pure (a <> a))
+                ["byebye", "worldworld", "hellohello"]
 
-f9 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> Proxy "8" -> Proxy "9" -> IO ()
-f9 _ _ _ _ _ _ _ _ _ = pure ()
+        it "no mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) ((empty <|> basic) >>= \a -> pure (a <> a))
+                ["byebye", "worldworld", "hellohello"]
 
-f10 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> Proxy "8" -> Proxy "9" -> Proxy "10" -> IO ()
-f10 _ _ _ _ _ _ _ _ _ _ = pure ()
+    describe "Alternative: left catch: (pure a) <|> b = pure a" $ do
+        it "right mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) (pure "foo" <|> basic)
+                ["foo"]
 
-f11 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> Proxy "8" -> Proxy "9" -> Proxy "10" -> Proxy "11" -> IO ()
-f11 _ _ _ _ _ _ _ _ _ _ _ = pure ()
+    -------------------------------------------------------------
 
-g1_1 :: IO ()
-g1_1 = f1 `bind1` m1
+    describe "MonadPlus: Monoid: mzero" $ do
+        it "mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) mzero []
 
-g2_1 :: Proxy "2" -> IO ()
-g2_1 = f2 `bind1` m1
+    describe "MonadPlus: Monoid: right mzero" $ do
+        testDelegate ((`evalMaybeT` ()) . evalAContT) (basic `mplus` empty)
 
-g2_1_1 :: IO ()
-g2_1_1 = f2 `bind1` m1 `bind1` m2
+    describe "MonadPlus: Monoid: left mzero" $ do
+        testDelegate ((`evalMaybeT` ()) . evalAContT) (empty `mplus` basic)
 
-g2_2 :: Proxy "1" -> IO ()
-g2_2 = f2 `bind2` m2
+    describe "MonadPlus" $ do
+        it "pure foo `mplus` basic = pure foo" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) (pure "foo" `mplus` basic) ["foo"]
 
-g2_2_1 :: IO ()
-g2_2_1 = f2 `bind2` m2 `bind1` m1
+    describe "MonadPlus: basic `mplus` pure foo = basic" $ do
+        testDelegate ((`evalMaybeT` ()) . evalAContT) (basic `mplus` pure "foo")
 
-g3 :: Proxy "1" -> Proxy "2" -> IO ()
-g3 = f3 `bind3` m3
+    describe "MonadPlus: Left Zero: mzero >>= k = mzero" $ do
+        it "MonadPlus: Left Zero: mzero >>= k = mzero" $ do
+            let m = mzero >>= \_ -> error "crash"
+            v <- newIORef []
+            (`evalMaybeT` ()) $ evalAContT $ do
+                a <- m
+                -- This happens once for every @a@
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end"]
 
-g4 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> IO ()
-g4 = f4 `bind4` m4
+    describe "MonadPlus: m *> mzero = mzero" $ do
+        it "right mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) (basic *> mzero) []
 
-g5 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> IO ()
-g5 = f5 `bind5` m5
+    describe "MonadPlus: left distribution: a `mplus` b >>= k = (a >>= k) `mplus` (b >>= k)" $ do
+        it "right mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) ((basic `mplus` mzero) >>= \a -> pure (a <> a))
+                ["byebye", "worldworld", "hellohello"]
 
-g6 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> IO ()
-g6 = f6 `bind6` m6
+        it "left mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) ((mzero `mplus` basic) >>= \a -> pure (a <> a))
+                ["byebye", "worldworld", "hellohello"]
 
-g7 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> IO ()
-g7 = f7 `bind7` m7
+        it "no mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) ((basic `mplus` basic) >>= \a -> pure (a <> a))
+                ["byebye", "worldworld", "hellohello"]
 
-g8 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> IO ()
-g8 = f8 `bind8` m8
+    describe "MonadPlus: left catch: (return a) `mplus` b = return a" $ do
+        it "right mzero" $ do
+            testBasic ((`evalMaybeT` ()) . evalAContT) (pure "foo" `mplus` basic)
+                ["foo"]
 
-g9 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> Proxy "8" -> IO ()
-g9 = f9 `bind9` m9
+    -------------------------------------------------------------
+    describe "ContT" $ do
+        testDelegate evalContT basic
+        testDischarge evalContT basic
 
-g10 :: Proxy "1" -> Proxy "2" -> Proxy "3" -> Proxy "4" -> Proxy "5" -> Proxy "6" -> Proxy "7" -> Proxy "8" -> Proxy "9" -> IO ()
-g10 = f10 `bind10` m10
+    describe "AContT ()" $ do
+        testDelegate evalAContT basic
+        testDischarge evalAContT basic
 
-g_x1 :: Proxy "1" -> Proxy "3" -> Proxy "8" -> IO ()
-g_x1 = f10 `bind10` m10 `bind5` m5 `bind6` m7 `bind2` m2 `bind3` m4 `bind5` m9 `bind3` m6
+    describe "AContT () MaybeT" $ do
+        testDelegateAlternative ((`evalMaybeT` ()) . evalAContT) basic
 
-g_x2 :: Proxy "9" -> Proxy "10" -> IO ()
-g_x2 = f10 `bind1` m1 `bind1` m2 `bind1` m3 `bind1` m4 `bind1` m5 `bind1` m6 `bind1` m7 `bind1` m8
+    describe "MaybeT ContT" $ do
+        testDelegate (evalContT . (`evalMaybeT` ())) basic
+        testDelegateAlternative (evalContT . (`evalMaybeT` ())) basic
+
+    describe "ExceptT ContT" $ do
+        testDelegate (evalContT . void . runExceptT) basic
+
+        let processError v m = do
+                e <- m
+                case e of
+                    Left a -> liftIO $ modifyIORef v (a :)
+                    Right () -> pure ()
+
+        it "delegate allows firing with failure1" $ do
+            v <- newIORef []
+            (void . evalContT . processError v . runExceptT) $ do
+                a <- delegate $ \fire -> do
+                    fire "a"
+                    fire "b"
+                    void $ throwError "error"
+                    basic >>= fire
+                -- This happens once for every @a@
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "error", "b", "a"]
+
+        it "delegate allows firing with failure0" $ do
+            v <- newIORef []
+            (void . evalContT . processError v . runExceptT) $ do
+                a <- delegate $ \fire -> do
+                    void $ throwError "error"
+                    basic >>= fire
+                -- This happens once for every @a@
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "error"]

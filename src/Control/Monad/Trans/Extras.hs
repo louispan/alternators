@@ -41,7 +41,7 @@ guardJustIO :: AlternativeIO m => IO (Maybe a) -> m a
 guardJustIO = guardJustM . liftIO
 
 -- | The IO instance of Applicative and MonadPlus is dangerous as it it too easy
--- to accidently omit a MaybeT in the transformer stack and introduce exceptions.
+-- to accidentally omit a MaybeT in the transformer stack and introduce exceptions.
 -- Make a pull request to add to this list.
 type family (IsSafeAlternative a) :: Bool where
   IsSafeAlternative IO = 'False
@@ -54,6 +54,7 @@ class Alternative m => SafeAlternative (m :: * -> *)
 instance {-# OVERLAPPABLE #-} (Alternative (t m), MonadTrans t, SafeAlternative m) => SafeAlternative (t m)
 
 -- | The real instance that fulfills the the 'SafeAlternative' constraint
+-- This instance terminates the above transformer instance search.
 instance {-# OVERLAPPABLE #-} Monad m => SafeAlternative (MaybeT m)
 
 -- | Anything except IO is a safe alternative instance

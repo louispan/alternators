@@ -22,6 +22,7 @@ library
                        Control.Monad.Environ
                        Control.Monad.Observer
                        Control.Monad.Trans.Extras
+                       Control.Monad.Trans.ACont
                        Data.Function.Extras
                        Data.IORef.Extras
                        Data.Kind.Extras
@@ -32,6 +33,7 @@ library
                      , deepseq >= 1.4
                      , dlist >= 0.8
                      , hashable >= 1.2
+                     , kan-extensions >= 5.2
                      , mmorph >= 1
                      , mtl >= 2
                      , stm >= 2.4
@@ -41,12 +43,16 @@ library
   ghc-options:         -Wall -Wredundant-constraints
   default-language:    Haskell2010
 
-test-suite glazier-test
+test-suite test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
+  -- other-modules:       Bind
   build-depends:       base >= 4.7 && < 5
-                     , alternators >= 2.0
+                     , alternators
+                     , hspec >= 2
+                     , mtl >= 2
+                     , transformers >= 0.4
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall
   default-language:    Haskell2010
 
