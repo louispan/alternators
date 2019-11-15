@@ -17,12 +17,23 @@ import Control.Monad.Trans.Reader
 
 -- | A monad for firing and handling events
 -- @MonadDelegate m => m a@ is a monad that may fire an event @a@ zero, once or many times.
--- and monadic binding with @a -> m b@ is handling the @a@ to firing a @b@ event
+-- and monadic binding with @a -> m b@ is the body of the for loop that handles the @a@ t
 -- for each time the @a@ is fires.
 --
 -- A 'MonadDelegate' usually requires a 'ContT' or 'Control.Monad.AContT' in the transformer stack.
 -- Consider using a @AContT r (MaybeT m)@ in your transformer stack as it allows an 'Alternative' instance.
 -- which allows 'dischargeHead'
+--
+-- Applicative instance has the following semantics:
+-- @pure "foo"@ is a producer that produces "foo" once, then fires empty.
+--
+-- Alternative instance of MonadDelegate must follow the following semantics:
+-- 'empty' is a producer that never produces anything (Nothing)
+--
+-- left <|> right means drain left then drain right
+-- (@pure "foo" *> empty) <|> pure "bar" = delegate $ \fire -> fire "foo" *> fire "bar"
+-- = @pure "foo" (no empty) *> @pure "bar"
+
 class Monad m => MonadDelegate m where
 
     -- | Delegates the handing of @a@ to a continuation.
@@ -30,6 +41,17 @@ class Monad m => MonadDelegate m where
     -- to code defined later.
     -- The "inverse" of 'delegate' is 'dischargeBy' which looks is a bit like a 'bind'.
     delegate :: ((a -> m ()) -> m ()) -> m a
+
+
+    -- Fixme:: convert producer of a to
+    -- produce Nothing if the producer is drained, and
+    -- also return the producer of the next values.
+    -- draw :: m a -> m (Maybe (a, m a))
+
+    -- Signals termination of the producer - stop producing further values
+    -- Stronger than <|>
+    -- terminate :: m a
+
 
 -- | Adds in inverse operation to 'delegate'.
 -- Using 'delegate' results in a monad that may fire zero, once, or many times
@@ -57,6 +79,8 @@ dischargeBy = flip discharge
 
 -- | Convert a monad that fires multiple times, to a most that
 -- at most fires once.
+-- FIXME: This doesn't work if m is (m <|> pure ())
+-- so we need something stronger than empty
 delegateHead :: (MonadDelegate m, Alternative m) => m a -> m a
 delegateHead m = do
     delegate $ \fire -> do
@@ -65,6 +89,21 @@ delegateHead m = do
         a <- m
         fire a
         empty
+
+-- | Convert a monad that fires multiple times, to a most that
+-- at most fires once.
+delegateHeadIO :: (MonadIO m, MonadDelegate m, Alternative m) => m a -> m a
+delegateHeadIO m = do
+    delegate $ \fire -> do
+        -- for every event, fire it, then stop
+        -- which means stop after first event
+        liftIO $ putStrLn "head 1 about to run"
+        a <- m
+        liftIO $ putStrLn "head 2 about to fire"
+        fire a
+        liftIO $ putStrLn "head 3 fired"
+        empty
+        liftIO $ putStrLn "head 4"
 
 -- -- | collect all the times the input monad fires into a list.
 -- -- Does not fire an empty list.
