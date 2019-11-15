@@ -56,8 +56,8 @@ withAContT :: ((b -> m r) -> (a -> m r)) -> AContT r m a -> AContT r m b
 withAContT f m = AContT $ runAContT m . f
 
 -- | @'liftLocal' ask local@ yields a @local@ function for @'ContT' r m@.
-aliftLocal :: (Monad m) => m r' -> ((r' -> r') -> m r -> m r) ->
+liftLocal :: (Monad m) => m r' -> ((r' -> r') -> m r -> m r) ->
     (r' -> r') -> AContT r m a -> AContT r m a
-aliftLocal ask local f m = AContT $ \ c -> do
+liftLocal ask local f m = AContT $ \ c -> do
     r <- ask
     local f (runAContT m (local (const r) . c))

@@ -7,6 +7,7 @@
 
 module Control.Monad.Delegate where
 
+import Control.Applicative
 import Control.Monad.Cont
 import Control.Monad.Trans.Cont (evalContT)
 import Control.Monad.Trans.Except
@@ -19,8 +20,9 @@ import Control.Monad.Trans.Reader
 -- and monadic binding with @a -> m b@ is handling the @a@ to firing a @b@ event
 -- for each time the @a@ is fires.
 --
--- This basically requires a 'ContT' or 'Control.Monad.AContT' in the transformer stack.
+-- A 'MonadDelegate' usually requires a 'ContT' or 'Control.Monad.AContT' in the transformer stack.
 -- Consider using a @AContT r (MaybeT m)@ in your transformer stack as it allows an 'Alternative' instance.
+-- which allows 'dischargeHead'
 class Monad m => MonadDelegate m where
 
     -- | Delegates the handing of @a@ to a continuation.
@@ -28,7 +30,6 @@ class Monad m => MonadDelegate m where
     -- to code defined later.
     -- The "inverse" of 'delegate' is 'dischargeBy' which looks is a bit like a 'bind'.
     delegate :: ((a -> m ()) -> m ()) -> m a
-
 
 -- | Adds in inverse operation to 'delegate'.
 -- Using 'delegate' results in a monad that may fire zero, once, or many times
@@ -54,6 +55,17 @@ infixr 1 `discharge` -- like `(=<<)`
 dischargeBy :: MonadDischarge m => m a -> (a -> m ()) -> m ()
 dischargeBy = flip discharge
 
+-- | Convert a monad that fires multiple times, to a most that
+-- at most fires once.
+delegateHead :: (MonadDelegate m, Alternative m) => m a -> m a
+delegateHead m = do
+    delegate $ \fire -> do
+        -- for every event, fire it, then stop
+        -- which means stop after first event
+        a <- m
+        fire a
+        empty
+
 -- -- | collect all the times the input monad fires into a list.
 -- -- Does not fire an empty list.
 -- dischargeList :: (MonadDelegate m, MonadIO m) => m a -> m [a]
@@ -62,6 +74,9 @@ dischargeBy = flip discharge
 --     let f a = liftIO $ atomicModifyIORef v (\b -> (b `DL.snoc` a, ()))
 --     discharge f m
 --     liftIO $ DL.toList <$> readIORef v
+
+-- callCC :: ((a -> ContT r m b) -> ContT r m a) -> ContT r m a
+-- callCC f = ContT $ \ c -> runContT (f (\ x -> ContT $ \ _ -> c x)) c
 
 -- | Instance that does real work using continuations
 instance Monad m => MonadDelegate (ContT () m) where
@@ -97,8 +112,29 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
             -- Just () -> pure ()
             _ -> pure ()
 
+instance (MonadDischarge m, MonadCont m) => MonadDischarge (MaybeT m) where
+    -- dischargedBy :: MaybeT m a -> (a -> MaybeT m ()) -> MaybeT m ()
+    -- f :: (a -> MaybeT m ()
+    discharge f (MaybeT g) = delegate $ \fire -> do
+            a <- MaybeT $ callCC $ \escape -> Just <$> dischargeBy g (f' escape)
+            -- for every event, fire it, then stop
+            -- which means stop after first event
+            fire a
+            empty
+      where
+        -- f' :: Maybe a -> m ()
+        f' escape Nothing = escape Nothing
+        f' escape (Just a) = go escape $ f a
+        -- go :: (Maybe () -> m (Maybe ())) -> MaybeT m () -> m ()
+        go escape (MaybeT m) = do
+            ma <- m
+            case ma of
+                Nothing -> escape Nothing -- need to prevent subsequent fires
+                -- Just () -> pure ()
+                _ -> pure ()
+
 -- | There is no instance of 'MonadDischarge' for 'ExceptT'
-instance (MonadCont m, MonadDelegate m) => MonadDelegate (ExceptT e m) where
+instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
     -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
     delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
         -- Use the given @f@ handler with the 'Right' case of @k@
@@ -109,6 +145,24 @@ instance (MonadCont m, MonadDelegate m) => MonadDelegate (ExceptT e m) where
             Left e -> k (Left e)
             -- Right () -> pure ()
             _ -> pure ()
+
+instance (MonadCont m, Alternative m, MonadDischarge m) => MonadDischarge (ExceptT e m) where
+    discharge f (ExceptT g) = delegate $ \fire -> do
+        a <- ExceptT $ callCC $ \escape -> Right <$> dischargeBy g (f' escape)
+        -- for every event, fire it, then stop
+        -- which means stop after first event
+        fire a
+        lift empty
+      where
+        f' escape (Left e) = escape (Left e)
+        f' escape (Right a) = go escape $ f a
+        go escape (ExceptT m) = do
+            ma <- m
+            case ma of
+                (Left e) -> escape (Left e) -- need to prevent subsequent fires
+                -- Right () -> pure ()
+                _ -> pure ()
+
 
 -- | 'delegate' handling of two different things
 delegate2 :: MonadDelegate m => ((a -> m (), b -> m ()) -> m ()) -> m (Either a b)

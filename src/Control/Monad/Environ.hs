@@ -37,8 +37,8 @@ import qualified Control.Monad.RWS.Strict as Strict
 import Control.Monad.State.Class
 import qualified Control.Monad.State.Lazy as Lazy
 import qualified Control.Monad.State.Strict as Strict
-import Control.Monad.Trans.ACont
-import Control.Monad.Trans.Cont
+import Control.Monad.Trans.ACont as ACont
+import Control.Monad.Trans.Cont as Cont
 import Data.Proxy
 import Data.Tagged.Extras
 
@@ -94,11 +94,11 @@ instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MFunctor t, MonadAsk p
 -- | ContT is not an instance of MFunctor, so implement this one explicitly
 instance {-# OVERLAPPABLE #-} (MonadAsk p r m) => MonadAsk p r (ContT x m) where
     askEnvP = lift . askEnvP
-    localEnvP p = liftLocal (askEnvP p) (localEnvP p)
+    localEnvP p = Cont.liftLocal (askEnvP p) (localEnvP p)
 
 instance {-# OVERLAPPABLE #-} (MonadAsk p r m) => MonadAsk p r (AContT x m) where
     askEnvP = lift . askEnvP
-    localEnvP p = aliftLocal (askEnvP p) (localEnvP p)
+    localEnvP p = ACont.liftLocal (askEnvP p) (localEnvP p)
 
 instance {-# OVERLAPPABLE #-} Monad m => MonadAsk r r (ReaderT r m) where
     askEnvP _ = ask

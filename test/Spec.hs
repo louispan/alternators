@@ -2,10 +2,11 @@ module Main where
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Cont
 import Control.Monad.Delegate
 import Control.Monad.Except
 import Control.Monad.Trans.ACont
-import Control.Monad.Trans.Cont
+import Control.Monad.Trans.Cont (evalContT)
 import Control.Monad.Trans.Extras
 import Data.IORef
 import Test.Hspec
@@ -34,6 +35,15 @@ spec = do
         testDelegate runM m = do
             it "delegate allows firing multiple times" $ do
                 testBasic runM m ["bye", "world", "hello"]
+
+            it "callCC get call multiple times" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    a <- callCC $ \k -> m >>= k
+                    liftIO $ modifyIORef v (a :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                as `shouldBe` ["end", "bye", "world", "hello"]
 
         testDischarge runM m = do
             it "discharge reduces it back to only firing once, even if it does not fire" $ do
@@ -207,13 +217,56 @@ spec = do
     describe "AContT ()" $ do
         testDelegate evalAContT basic
         testDischarge evalAContT basic
+        it "delegateHead" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalAContT) $ do
+                a <- delegateHead basic
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hello"]
 
     describe "AContT () MaybeT" $ do
         testDelegateAlternative ((`evalMaybeT` ()) . evalAContT) basic
+        testDischarge ((`evalMaybeT` ()) . evalAContT) basic
 
     describe "MaybeT ContT" $ do
         testDelegate (evalContT . (`evalMaybeT` ())) basic
         testDelegateAlternative (evalContT . (`evalMaybeT` ())) basic
+        testDischarge ((`evalMaybeT` ()) . evalContT) basic
+
+        it "dischargeHead" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalAContT) $ do
+                a <- delegate $ \fire -> do
+                    -- for every event, fire it, then stop
+                    -- which means stop after first event
+                    a <- basic
+                    fire a
+                    lift empty
+
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hello"]
+
+    describe "ExceptT AContT MaybeT" $ do
+        testDischarge ((`evalMaybeT` ()) . evalAContT . void . runExceptT) basic
+
+        it "dischargeHead" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalAContT . void . runExceptT) $ do
+                a <- delegate $ \fire -> do
+                    -- for every event, fire it, then stop
+                    -- which means stop after first event
+                    a <- basic
+                    fire a
+                    lift empty
+
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hello"]
 
     describe "ExceptT ContT" $ do
         testDelegate (evalContT . void . runExceptT) basic
