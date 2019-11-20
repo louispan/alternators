@@ -103,6 +103,8 @@ spec = do
                         fire "a"
                         fire "b"
                         void $ empty
+                        -- only the first empty has an effect
+                        void $ empty
                         m v >>= fire
                     -- This happens once for every @a@
                     liftIO $ modifyIORef v (a :)
@@ -123,26 +125,26 @@ spec = do
                 as `shouldBe` ["end"]
 
 
-    describe "Alternative: Monoid: empty:" $ do
-        it "empty" $ do
-            testBasic ((`evalMaybeT` ()) . evalAContT) (start empty) []
+    -- describe "Alternative: Monoid: empty:" $ do
+    --     it "empty" $ do
+    --         testBasic ((`evalMaybeT` ()) . evalAContT) (start empty) []
 
-    describe "Alternative: Monoid: right empty:" $ do
-        testDelegate ((`evalMaybeT` ()) . evalAContT) (\v -> basic v <|> empty)
+    -- describe "Alternative: Monoid: right empty:" $ do
+    --     testDelegate ((`evalMaybeT` ()) . evalAContT) (\v -> basic v <|> empty)
 
-    describe "Alternative: Monoid: left empty:" $ do
-        testDelegate ((`evalMaybeT` ()) . evalAContT) (\v -> empty <|> basic v)
+    -- describe "Alternative: Monoid: left empty:" $ do
+    --     testDelegate ((`evalMaybeT` ()) . evalAContT) (\v -> empty <|> basic v)
 
-    describe "Alternative" $ do
-        it "pure foo <|> basic = pure foo" $ do
-            testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> start (pure "foo") v <|> basic v) ["foo"]
+    -- describe "Alternative" $ do
+    --     it "pure foo <|> basic = pure foo" $ do
+    --         testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> start (pure "foo") v <|> basic v) ["foo"]
 
-    describe "Alternative: basic <|> pure foo = basic" $ do
-        testDelegate ((`evalMaybeT` ()) . evalAContT) (\v -> basic v <|> start (pure "foo") v)
+    -- describe "Alternative: basic <|> pure foo = basic" $ do
+    --     testDelegate ((`evalMaybeT` ()) . evalAContT) (\v -> basic v <|> start (pure "foo") v)
 
-    describe "Alternative: NOT right Zero. m *> empty != empty" $ do
-        it "bind to empty teminates, but includes effects up to termination" $ do
-            testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> basic v *> empty) []
+    -- describe "Alternative: NOT right Zero. m *> empty != empty" $ do
+    --     it "bind to empty teminates, but includes effects up to termination" $ do
+    --         testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> basic v *> empty) []
 
     -- describe "Alternative: left distribution: a <|> b >>= k = (a >>= k) <|> (b >>= k)" $ do
     --     it "right mzero" $ do
@@ -221,16 +223,81 @@ spec = do
     --     testDischarge evalContT basic
 
     -- describe "AContT ()" $ do
-    --     testDelegate evalAContT basic
-    --     testDischarge evalAContT basic
+    --     -- testDelegate evalAContT basic
+    --     -- testDischarge evalAContT basic
     --     it "delegateHead" $ do
     --         v <- newIORef []
     --         ((`evalMaybeT` ()) . evalAContT) $ do
-    --             a <- delegateHead basic
+    --             a <- delegateHeadIO (basic v)
     --             liftIO $ modifyIORef v (a :)
     --         liftIO $ modifyIORef v ("end" :)
     --         as <- readIORef v
-    --         as `shouldBe` ["end", "hello"]
+    --         as `shouldBe` ["end", "hello", "start"]
+
+
+    -- describe "AContT ()" $ do
+    --     -- testDelegate evalAContT basic
+    --     -- testDischarge evalAContT basic
+    --     it "delegateHead" $ do
+    --         v <- newIORef []
+    --         ((`evalMaybeT` ()) . evalAContT) $ do
+    --             a <- delegateHeadIO (basic v <|> pure "hi")
+    --             liftIO $ modifyIORef v (a :)
+    --         liftIO $ modifyIORef v ("end" :)
+    --         as <- readIORef v
+    --         as `shouldBe` ["end", "hello", "start"]
+
+
+    describe "ContT ()" $ do
+        -- testDelegate evalAContT basic
+        -- testDischarge evalAContT basic
+        it "delegateHead" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+                a <- delegateHeadIO (basic v)
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hello", "start"]
+
+
+    describe "ContT ()" $ do
+        -- testDelegate evalAContT basic
+        -- testDischarge evalAContT basic
+        it "delegateHead" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+                a <- delegateHeadIO (basic v <|> pure "hi") `also` empty
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hello", "start"]
+
+
+    describe "ContT ()" $ do
+        -- testDelegate evalAContT basic
+        -- testDischarge evalAContT basic
+        it "alternative" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+                let m1 = pure "foo" `also` empty
+                    m2 = pure "bar" `also` empty
+                a <- m1 <|> m2 <|> (pure "hi")
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hi", "bar", "foo"]
+
+        it "alternative2" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+                let m1 = pure "foo" `also` empty `also` empty `also` empty
+                    m2 = pure "bar" `also` empty
+                a <- m1 <|> m2 <|> (pure "hi")
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "hi", "bar", "foo"]
 
     -- describe "AContT () MaybeT" $ do
     --     testDelegateAlternative ((`evalMaybeT` ()) . evalAContT) basic

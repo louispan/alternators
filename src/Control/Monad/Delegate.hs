@@ -25,35 +25,37 @@ import Control.Monad.Trans.Reader
 -- which allows 'dischargeHead'
 --
 -- Applicative instance has the following semantics:
--- @pure "foo"@ is a producer that produces "foo" once, then fires empty.
+-- @pure "foo"@ is a producer that produces "foo" once
 --
 -- Alternative instance of MonadDelegate must follow the following semantics:
 -- 'empty' is a producer that never produces anything (Nothing)
+-- 'empty' can also be used after firing some events to mean "continue" with next
+-- Alternative producer.
+-- @empty *> m = empty@ ie, anything after an empty is ignored.
 --
--- left <|> right means drain left then drain right
--- (@pure "foo" *> empty) <|> pure "bar" = delegate $ \fire -> fire "foo" *> fire "bar"
--- = @pure "foo" (no empty) *> @pure "bar"
+-- left <|> right means fire from left but catch any 'empty' with 'right'
 
-class Monad m => MonadDelegate m where
 
+class (Monad m) => MonadDelegate m where
     -- | Delegates the handing of @a@ to a continuation.
     -- The intuition is that delegate allows deferring subsequent binds
     -- to code defined later.
     -- The "inverse" of 'delegate' is 'dischargeBy' which looks is a bit like a 'bind'.
     delegate :: ((a -> m ()) -> m ()) -> m a
 
+    -- | Given a terminate monad that signals stop where
+    -- terminate is stronger than 'empty' and 'also'
+    -- in that @terminate <|> pure () = terminate@
+    -- and @terminate `also` pure () = terminate@
+    -- return a monad that doesn't have the terminate marker
+    terminally :: (m b -> m a) -> m a
 
-    -- Fixme:: convert producer of a to
-    -- produce Nothing if the producer is drained, and
-    -- also return the producer of the next values.
-    -- draw :: m a -> m (Maybe (a, m a))
-
-    -- Signals termination of the producer - stop producing further values
-    -- Stronger than <|>
-    -- terminate :: m a
+    -- | A binary associatve function with (pure ()) as the zero.
+    -- 'also' drains the left producer, followed by draining the right producer.
+    also :: m a -> m a -> m a
 
 
--- | Adds in inverse operation to 'delegate'.
+-- | The dual to  'delegate'.
 -- Using 'delegate' results in a monad that may fire zero, once, or many times
 -- Using 'discharge' results in a monad that is guaranteed to fire unit once.
 --
@@ -71,30 +73,40 @@ class MonadDelegate m => MonadDischarge m where
     -- This results in a monad that is guaranteed to fire unit once.
     discharge :: (a -> m ()) -> m a -> m ()
 
+-- class (Alternative m, MonadDelegate m) => MonadTerminate m where
+--     -- stop firing events. This is stronger than 'empty'
+--     -- in that @terminate <|> pure () = terminate@
+--     -- Semantically, it is a bit like "break" in C.
+--     terminate :: m a
+
 infixl 1 `dischargeBy` -- like `(>>=)`
 infixr 1 `discharge` -- like `(=<<)`
 
 dischargeBy :: MonadDischarge m => m a -> (a -> m ()) -> m ()
 dischargeBy = flip discharge
 
+-- | convert to something that will fire its events as a Just
+-- followed by a final Nothing
+withEnding :: (MonadDelegate m, Alternative m) => m a -> m (Maybe a)
+-- FIXME: wrong, only want to add empty IFF NOT already empty
+withEnding m = (Just <$> (m `also` empty)) <|> pure Nothing
+
 -- | Convert a monad that fires multiple times, to a most that
 -- at most fires once.
--- FIXME: This doesn't work if m is (m <|> pure ())
--- so we need something stronger than empty
-delegateHead :: (MonadDelegate m, Alternative m) => m a -> m a
+delegateHead :: (MonadDelegate m) => m a -> m a
 delegateHead m = do
-    delegate $ \fire -> do
+    terminally $ \terminate -> delegate $ \fire -> do
         -- for every event, fire it, then stop
         -- which means stop after first event
         a <- m
         fire a
-        empty
+        terminate
 
 -- | Convert a monad that fires multiple times, to a most that
 -- at most fires once.
-delegateHeadIO :: (MonadIO m, MonadDelegate m, Alternative m) => m a -> m a
+delegateHeadIO :: (MonadIO m, MonadDelegate m) => m a -> m a
 delegateHeadIO m = do
-    delegate $ \fire -> do
+    terminally $ \terminate -> delegate $ \fire -> do
         -- for every event, fire it, then stop
         -- which means stop after first event
         liftIO $ putStrLn "head 1 about to run"
@@ -102,7 +114,7 @@ delegateHeadIO m = do
         liftIO $ putStrLn "head 2 about to fire"
         fire a
         liftIO $ putStrLn "head 3 fired"
-        empty
+        void $ terminate
         liftIO $ putStrLn "head 4"
 
 -- -- | collect all the times the input monad fires into a list.
@@ -118,28 +130,50 @@ delegateHeadIO m = do
 -- callCC f = ContT $ \ c -> runContT (f (\ x -> ContT $ \ _ -> c x)) c
 
 -- | Instance that does real work using continuations
-instance Monad m => MonadDelegate (ContT () m) where
+instance Monad m => MonadDelegate (ContT () (MaybeT m)) where
+    terminally f = unterminate $ f terminate
+      where
+        terminate = ContT $ \_ -> empty
+        unterminate (ContT g) = ContT $ \k -> lift $ void $ runMaybeT $ g k
+    (ContT f) `also` (ContT g) = ContT $ \k -> f k *> g k
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
 
-instance Monad m => MonadDischarge (ContT () m) where
+instance Monad m => MonadDischarge (ContT () (MaybeT m)) where
     discharge f (ContT g) = lift $ g (evalContT . f)
 
 -- | Passthrough instance
+-- instance (MonadTerminate m) => MonadTerminate (IdentityT m) where
+    -- terminally (IdentityT m) = lift $ terminally m
+    -- (IdentityT f) `also` (IdentityT g) = IdentityT $ f `also` g
+
 instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
+    terminally f = IdentityT $ terminally $ \terminate -> runIdentityT $ f (lift terminate)
+    (IdentityT f) `also` (IdentityT g) = IdentityT $ f `also` g
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
 
 instance (MonadDischarge m) => MonadDischarge (IdentityT m) where
     discharge f (IdentityT m) = lift $ (runIdentityT . f) `discharge` m
 
 -- | Passthrough instance
+-- instance (MonadTerminate m) => MonadTerminate (ReaderT env m) where
+--     terminally (ReaderT f) = ReaderT $ \r -> terminally (f r)
+--     (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
+
 instance (MonadDelegate m) => MonadDelegate (ReaderT env m) where
+    terminally f = ReaderT $ \r -> terminally $ \terminate -> (`runReaderT` r) $ f (lift terminate)
+    (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
     delegate f = ReaderT $ \env -> delegate $ \k -> (`runReaderT` env) $ f (lift . k)
 
 instance (MonadDischarge m) => MonadDischarge (ReaderT env m) where
     discharge f (ReaderT g) = ReaderT $ \r -> ((`runReaderT` r) . f) `discharge` (g r)
 
--- | There is no instance of 'MonadDischarge' for 'MaybeT'
+-- instance (MonadTerminate m) => MonadTerminate (MaybeT m) where
+--     terminally (MaybeT m) = MaybeT $ terminally m
+--     (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
+
 instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
+    terminally f = MaybeT $ terminally $ \terminate -> runMaybeT $ f (lift terminate)
+    (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
     -- f :: ((a -> MaybeT m ()) -> MaybeT m ())
     delegate f = MaybeT . delegate $ \k -> do -- k :: (Maybe a -> m ())
         -- Use the given @f@ handler with the 'Just' case of @k@
@@ -151,15 +185,15 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
             -- Just () -> pure ()
             _ -> pure ()
 
-instance (MonadDischarge m, MonadCont m) => MonadDischarge (MaybeT m) where
+instance (MonadDischarge m, MonadDelegate m, MonadCont m) => MonadDischarge (MaybeT m) where
     -- dischargedBy :: MaybeT m a -> (a -> MaybeT m ()) -> MaybeT m ()
     -- f :: (a -> MaybeT m ()
-    discharge f (MaybeT g) = delegate $ \fire -> do
+    discharge f (MaybeT g) = terminally $ \terminate -> delegate $ \fire -> do
             a <- MaybeT $ callCC $ \escape -> Just <$> dischargeBy g (f' escape)
             -- for every event, fire it, then stop
             -- which means stop after first event
             fire a
-            empty
+            terminate
       where
         -- f' :: Maybe a -> m ()
         f' escape Nothing = escape Nothing
@@ -172,8 +206,17 @@ instance (MonadDischarge m, MonadCont m) => MonadDischarge (MaybeT m) where
                 -- Just () -> pure ()
                 _ -> pure ()
 
--- | There is no instance of 'MonadDischarge' for 'ExceptT'
+-- instance (Monoid e, MonadTerminate m) => MonadTerminate (ExceptT e m) where
+--     terminally (ExceptT m) = ExceptT $ f <$> terminally m
+--       where
+--         f Nothing = Right Nothing
+--         f (Just (Left e)) = Left e
+--         f (Just (Right e)) = Right (Just e)
+--     (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
+
 instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
+    terminally f = ExceptT $ terminally $ \terminate -> runExceptT $ f (lift terminate)
+    (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
     -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
     delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
         -- Use the given @f@ handler with the 'Right' case of @k@
@@ -185,13 +228,13 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
             -- Right () -> pure ()
             _ -> pure ()
 
-instance (MonadCont m, Alternative m, MonadDischarge m) => MonadDischarge (ExceptT e m) where
-    discharge f (ExceptT g) = delegate $ \fire -> do
+instance (MonadCont m, MonadDelegate m, MonadDischarge m) => MonadDischarge (ExceptT e m) where
+    discharge f (ExceptT g) = terminally $ \terminate -> delegate $ \fire -> do
         a <- ExceptT $ callCC $ \escape -> Right <$> dischargeBy g (f' escape)
         -- for every event, fire it, then stop
         -- which means stop after first event
         fire a
-        lift empty
+        terminate
       where
         f' escape (Left e) = escape (Left e)
         f' escape (Right a) = go escape $ f a
@@ -202,18 +245,17 @@ instance (MonadCont m, Alternative m, MonadDischarge m) => MonadDischarge (Excep
                 -- Right () -> pure ()
                 _ -> pure ()
 
-
 -- | 'delegate' handling of two different things
 delegate2 :: MonadDelegate m => ((a -> m (), b -> m ()) -> m ()) -> m (Either a b)
 delegate2 f = delegate $ \fire -> f (fire . Left, fire . Right)
 
--- | Only handle with given monad, and ignore anything else.
--- @forall@ so @TypeApplications@ can be used to specify the type of @a@.
--- It pretends to fire @a@ but never does.
--- This means subseqent fmap, aps, binds are always ignored.
--- This is like @throw@ that exits event handling to a different control scope.
-finish :: forall a m. MonadDelegate m => m () -> m a
-finish = delegate . const
+-- -- | Only handle with given monad, and ignore anything else.
+-- -- @forall@ so @TypeApplications@ can be used to specify the type of @a@.
+-- -- It pretends to fire @a@ but never does.
+-- -- This means subseqent fmap, aps, binds are always ignored.
+-- -- This is like @throw@ that exits event handling to a different control scope.
+-- finish :: forall a m. MonadDelegate m => m () -> m a
+-- finish = delegate . const
 
 -- -- | Convert two handler to a monad that may fire two possibilities
 -- -- The inverse is 'bindBoth'.
