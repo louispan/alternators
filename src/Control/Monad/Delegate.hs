@@ -50,10 +50,6 @@ class (Monad m) => MonadDelegate m where
     -- return a monad that doesn't have the terminate marker
     terminally :: (m b -> m a) -> m a
 
-    -- | A binary associatve function with (pure ()) as the zero.
-    -- 'also' drains the left producer, followed by draining the right producer.
-    also :: m a -> m a -> m a
-
 
 -- | The dual to  'delegate'.
 -- Using 'delegate' results in a monad that may fire zero, once, or many times
@@ -63,7 +59,7 @@ class (Monad m) => MonadDelegate m where
 -- @
 -- m = delegate $ \fire -> m `dischargeBy` fire
 -- @
-class MonadDelegate m => MonadDischarge m where
+class Monad m => MonadDischarge m where
     -- | This signature looks a bit like 'flip' 'bind'.
     -- Apply handler to @m a @ and result in a monad that will
     -- fire @()@ at most once.
@@ -85,11 +81,19 @@ infixr 1 `discharge` -- like `(=<<)`
 dischargeBy :: MonadDischarge m => m a -> (a -> m ()) -> m ()
 dischargeBy = flip discharge
 
+-- | A binary associatve function with (pure ()) as the zero.
+-- 'also' drains the left producer, followed by draining the right producer.
+also :: (MonadDelegate m, MonadDischarge m) => m a -> m a -> m a
+f `also` g = delegate $ \fire -> do
+    fire `discharge` f
+    fire `discharge` g
+
 -- | convert to something that will fire its events as a Just
 -- followed by a final Nothing
-withEnding :: (MonadDelegate m, Alternative m) => m a -> m (Maybe a)
+withEnding :: (MonadDelegate m, MonadDischarge m, Alternative m) => m a -> m (Maybe a)
 -- FIXME: wrong, only want to add empty IFF NOT already empty
 withEnding m = (Just <$> (m `also` empty)) <|> pure Nothing
+
 
 -- | Convert a monad that fires multiple times, to a most that
 -- at most fires once.
@@ -126,8 +130,6 @@ delegateHeadIO m = do
 --     discharge f m
 --     liftIO $ DL.toList <$> readIORef v
 
--- callCC :: ((a -> ContT r m b) -> ContT r m a) -> ContT r m a
--- callCC f = ContT $ \ c -> runContT (f (\ x -> ContT $ \ _ -> c x)) c
 
 -- | Instance that does real work using continuations
 instance Monad m => MonadDelegate (ContT () (MaybeT m)) where
@@ -135,7 +137,6 @@ instance Monad m => MonadDelegate (ContT () (MaybeT m)) where
       where
         terminate = ContT $ \_ -> empty
         unterminate (ContT g) = ContT $ \k -> lift $ void $ runMaybeT $ g k
-    (ContT f) `also` (ContT g) = ContT $ \k -> f k *> g k
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
 
 instance Monad m => MonadDischarge (ContT () (MaybeT m)) where
@@ -148,7 +149,6 @@ instance Monad m => MonadDischarge (ContT () (MaybeT m)) where
 
 instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
     terminally f = IdentityT $ terminally $ \terminate -> runIdentityT $ f (lift terminate)
-    (IdentityT f) `also` (IdentityT g) = IdentityT $ f `also` g
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
 
 instance (MonadDischarge m) => MonadDischarge (IdentityT m) where
@@ -161,7 +161,6 @@ instance (MonadDischarge m) => MonadDischarge (IdentityT m) where
 
 instance (MonadDelegate m) => MonadDelegate (ReaderT env m) where
     terminally f = ReaderT $ \r -> terminally $ \terminate -> (`runReaderT` r) $ f (lift terminate)
-    (ReaderT f) `also` (ReaderT g) = ReaderT $ \r -> f r `also` g r
     delegate f = ReaderT $ \env -> delegate $ \k -> (`runReaderT` env) $ f (lift . k)
 
 instance (MonadDischarge m) => MonadDischarge (ReaderT env m) where
@@ -173,7 +172,6 @@ instance (MonadDischarge m) => MonadDischarge (ReaderT env m) where
 
 instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
     terminally f = MaybeT $ terminally $ \terminate -> runMaybeT $ f (lift terminate)
-    (MaybeT f) `also` (MaybeT g) = MaybeT $ f `also` g
     -- f :: ((a -> MaybeT m ()) -> MaybeT m ())
     delegate f = MaybeT . delegate $ \k -> do -- k :: (Maybe a -> m ())
         -- Use the given @f@ handler with the 'Just' case of @k@
@@ -185,26 +183,47 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
             -- Just () -> pure ()
             _ -> pure ()
 
-instance (MonadDischarge m, MonadDelegate m, MonadCont m) => MonadDischarge (MaybeT m) where
-    -- dischargedBy :: MaybeT m a -> (a -> MaybeT m ()) -> MaybeT m ()
-    -- f :: (a -> MaybeT m ()
-    discharge f (MaybeT g) = terminally $ \terminate -> delegate $ \fire -> do
-            a <- MaybeT $ callCC $ \escape -> Just <$> dischargeBy g (f' escape)
-            -- for every event, fire it, then stop
-            -- which means stop after first event
-            fire a
-            terminate
+instance Monad m => MonadDischarge (MaybeT (ContT () (MaybeT m))) where
+    discharge f (MaybeT (ContT g)) =
+            -- g :: (Maybe a -> MaybeT m ()) -> MaybeT m ()
+            -- f :: a -> MaybeT (ContT () (MaybeT m))
+            -- k :: (Maybe () -> MaybeT m ())
+            MaybeT $ ContT $ \k -> lift (runMaybeT (g f')) >>= k
+
       where
-        -- f' :: Maybe a -> m ()
-        f' escape Nothing = escape Nothing
-        f' escape (Just a) = go escape $ f a
-        -- go :: (Maybe () -> m (Maybe ())) -> MaybeT m () -> m ()
-        go escape (MaybeT m) = do
-            ma <- m
-            case ma of
-                Nothing -> escape Nothing -- need to prevent subsequent fires
-                -- Just () -> pure ()
-                _ -> pure ()
+        -- f' :: Maybe a -> MaybeT m ()
+        f' Nothing = empty
+        -- f a :: MaybeT (ContT () (MaybeT m))
+        -- runMaybeT (f a) :: ContT () (MaybeT m) (Maybe ())
+        -- runContT (runMaybeT (f a)) :: (Maybe () -> MaybeT m ()) -> MaybeT m ()
+        f' (Just a) = runContT ((runMaybeT (f a))) (MaybeT . pure)
+
+-- instance (MonadDischarge m, MonadDelegate m, MonadCont m) => MonadDischarge (MaybeT m) where
+--     -- dischargedBy :: MaybeT m a -> (a -> MaybeT m ()) -> MaybeT m ()
+--     -- f :: (a -> MaybeT m () or (a -> m (Maybe ())
+--     discharge f (MaybeT g) =
+--             -- callCC f = ContT $ \ c -> runContT (f (\ x -> ContT $ \ _ -> c x)) c
+--             -- callCC :: ((Maybe a -> m ()) -> m (Maybe a)) -> m (Maybe a)
+--             -- callCC :: ((a -> MaybeT m ()) -> MaybeT m a) -> MaybeT m a
+
+--             -- fire :: Maybe () -> m ()
+--             MaybeT $
+--                     ma <- delegate $ \fire -> do
+--                         dischargeBy g (f' fire)
+--                         fire $ Just ()
+--                     case ma of
+--                         Nothing -> terminate
+--                         Just _ -> pure $ Just ()
+
+--       where
+--         -- f' :: Maybe a -> m ()
+--         f' fire Nothing = fire Nothing
+--         f' fire (Just a) = do
+--             ma <- runMaybeT $ f a
+--             case ma of
+--                 Nothing -> fire Nothing -- need to prevent subsequent fires
+--                 -- Just () -> pure ()
+--                 _ -> pure ()
 
 -- instance (Monoid e, MonadTerminate m) => MonadTerminate (ExceptT e m) where
 --     terminally (ExceptT m) = ExceptT $ f <$> terminally m
@@ -216,7 +235,6 @@ instance (MonadDischarge m, MonadDelegate m, MonadCont m) => MonadDischarge (May
 
 instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
     terminally f = ExceptT $ terminally $ \terminate -> runExceptT $ f (lift terminate)
-    (ExceptT f) `also` (ExceptT g) = ExceptT $ f `also` g
     -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
     delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
         -- Use the given @f@ handler with the 'Right' case of @k@
@@ -229,12 +247,8 @@ instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
             _ -> pure ()
 
 instance (MonadCont m, MonadDelegate m, MonadDischarge m) => MonadDischarge (ExceptT e m) where
-    discharge f (ExceptT g) = terminally $ \terminate -> delegate $ \fire -> do
-        a <- ExceptT $ callCC $ \escape -> Right <$> dischargeBy g (f' escape)
-        -- for every event, fire it, then stop
-        -- which means stop after first event
-        fire a
-        terminate
+    discharge f (ExceptT g) =
+        ExceptT $ callCC $ \escape -> Right <$> dischargeBy g (f' escape)
       where
         f' escape (Left e) = escape (Left e)
         f' escape (Right a) = go escape $ f a
