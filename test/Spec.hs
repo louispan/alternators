@@ -251,27 +251,52 @@ spec = do
     describe "MaybeT (ContT ())" $ do
         -- testDelegate evalAContT basic
         -- testDischarge evalAContT basic
-        it "delegateHead" $ do
+        it "finish also" $ do
             v <- newIORef []
-            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
-                a <- delegateHeadIO (basic v)
+            ((`evalMaybeT` ()) . evalAContT) $ do
+                a <- ((finish (pure ())) `also` empty `also` empty) <|> pure "foo"
                 liftIO $ modifyIORef v (a :)
             liftIO $ modifyIORef v ("end" :)
             as <- readIORef v
-            as `shouldBe` ["end", "hello", "start"]
+            as `shouldBe` ["end", "foo"]
 
+    describe "MaybeT (ContT ())" $ do
+        -- testDelegate evalAContT basic
+        -- testDischarge evalAContT basic
+        it "also is definitely after" $ do
+            v <- newIORef []
+            ((`evalMaybeT` ()) . evalAContT) $ do
+                a <- (basic v <|> pure "hi") `also` empty `also` empty <|> pure "foo"
+                liftIO $ modifyIORef v (a :)
+            liftIO $ modifyIORef v ("end" :)
+            as <- readIORef v
+            as `shouldBe` ["end", "foo", "bye", "world", "hello", "start"]
 
-    describe "MaybeT (ContT ()" $ do
+    describe "MaybeT (ContT ())" $ do
         -- testDelegate evalAContT basic
         -- testDischarge evalAContT basic
         it "delegateHead" $ do
             v <- newIORef []
-            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
-                a <- delegateHeadIO (basic v <|> pure "hi") `also` empty
+            -- (void . runTerminateT . evalAContT) $ do
+            (void . evalContT) $ do
+                a <- delegateHead (basic v)
                 liftIO $ modifyIORef v (a :)
             liftIO $ modifyIORef v ("end" :)
             as <- readIORef v
             as `shouldBe` ["end", "hello", "start"]
+
+    -- describe "MaybeT (ContT ()" $ do
+    --     -- testDelegate evalAContT basic
+    --     -- testDischarge evalAContT basic
+    --     it "delegateHead2" $ do
+    --         v <- newIORef []
+    --         -- (void . runTerminateT . evalAContT) $ do
+    --         (void . evalAContT) $ do
+    --             a <- delegateHead (basic v <|> pure "hi") -- `also` empty
+    --             liftIO $ modifyIORef v (a :)
+    --         liftIO $ modifyIORef v ("end" :)
+    --         as <- readIORef v
+    --         as `shouldBe` ["end", "hello", "start"]
 
 
     describe "MaybeT (ContT ())" $ do
@@ -279,7 +304,7 @@ spec = do
         -- testDischarge evalAContT basic
         it "alternative" $ do
             v <- newIORef []
-            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+            ((`evalMaybeT` ()) . evalAContT) $ do
                 let m1 = pure "foo" `also` empty
                     m2 = pure "bar" `also` empty
                 a <- m1 <|> m2 <|> (pure "hi")
@@ -290,7 +315,7 @@ spec = do
 
         it "alternative2 also" $ do
             v <- newIORef []
-            ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+            ((`evalMaybeT` ()) . evalAContT) $ do
                 let m2 = delegate $ \fire -> do
                         fire "bar"
                         empty
@@ -313,14 +338,14 @@ spec = do
     describe "MaybeT ContT" $ do
     --     testDelegate (evalContT . (`evalMaybeT` ())) basic
     --     testDelegateAlternative (evalContT . (`evalMaybeT` ())) basic
-        testDischarge ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) basic
+        testDischarge ((`evalMaybeT` ()) . evalAContT) basic
 
         it "discharge reduces it back to only firing once2" $ do
             v <- newIORef []
-            void $ ((`evalMaybeT` ()) . evalContT . (`evalMaybeT` ())) $ do
+            void $ ((`evalMaybeT` ()) . evalAContT) $ do
                 let f a = do
                         liftIO $ modifyIORef v (a :)
-                        empty -- FIXME: This should cause stopping after hello?
+                        empty -- NB. This empty doesn't get caught as it's in discharge
                     m v' = do
                         liftIO $ modifyIORef v' ("start" :)
                         delegate $ \fire -> do
@@ -330,11 +355,11 @@ spec = do
                             empty
                             empty
                 discharge f (m v <|> pure "extra" <|> pure "none")
-                -- This only happens once
+                -- This only happens once, but doesn't happen because of empty in f
                 liftIO $ modifyIORef v ("test" :)
             liftIO $ modifyIORef v ("end" :)
             as <- readIORef v
-            as `shouldBe` ["end"] <> ["hello", "start"]
+            as `shouldBe` ["end"] <> ["none", "extra", "hello", "start"]
 
     --     it "dischargeHead" $ do
     --         v <- newIORef []
