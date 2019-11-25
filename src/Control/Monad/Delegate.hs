@@ -46,7 +46,7 @@ class (Monad m) => MonadDelegate m where
     -- | Delegates the handing of @a@ to a continuation.
     -- The intuition is that delegate allows deferring subsequent binds
     -- to code defined later.
-    -- The "inverse" of 'delegate' is 'dischargeBy' which looks is a bit like a 'bind'.
+    -- The "inverse" of 'delegate' is 'discharge' which looks is a bit like a 'bind'.
     delegate :: ((a -> m ()) -> m ()) -> m a
 
 -- | The dual to  'delegate'.
@@ -55,7 +55,7 @@ class (Monad m) => MonadDelegate m where
 --
 -- Law:
 -- @
--- m = delegate $ \fire -> fire `discharge` m
+-- m = delegate $ discharge m
 -- @
 class MonadDelegate m => MonadDischarge m where
     -- | This signature looks a bit like 'flip' 'bind'.
@@ -67,48 +67,36 @@ class MonadDelegate m => MonadDischarge m where
     -- This results in a monad that is guaranteed to fire unit at most once
     -- even if the monad was 'finish'ed.
     -- (The final @m ()@ could still be 'empty')
-    discharge :: (a -> m ()) -> m a -> m ()
+    discharge :: m a -> (a -> m ()) -> m ()
 
-infixl 1 `dischargeBy` -- like `(>>=)`
-infixl 1 `dischargeBy'` -- like `(>>=)`
-infixr 1 `discharge` -- like `(=<<)`
-infixr 1 `discharge'` -- like `(=<<)`
-
-dischargeBy :: MonadDischarge m => m a -> (a -> m ()) -> m ()
-dischargeBy = flip discharge
+infixl 1 `discharge` -- like `(>>=)`
+infixl 1 `discharge'` -- like `(>>=)`
 
 -- | a variation of 'discharge' that also catches 'empty', resulting
 -- in a monad that is guaranteed to fire unit @()@ once.
 -- This is no longer an inverse of 'delegate'
--- delegate $ \fire -> fire `discharge'` m = m without empty
-discharge' :: (MonadDischarge m, Alternative m) => (a -> m ()) -> m a -> m ()
-discharge' f m = (discharge f m) <|> pure ()
-
--- | a variation of 'dischargeBy' that also catches 'empty', resulting
--- in a monad that is guaranteed to fire unit @()@ once.
--- This is no longer an inverse of 'delegate'
--- delegate $ \fire -> fire `discharge'` m = m without empty
-dischargeBy' :: (MonadDischarge m, Alternative m) => m a -> (a -> m ()) -> m ()
-dischargeBy' = flip discharge'
+-- delegate $ discharge' m = m without empty
+discharge' :: (MonadDischarge m, Alternative m) => m a -> (a -> m ()) -> m ()
+discharge' m f = (discharge m f) <|> pure ()
 
 instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
 
 instance (MonadDischarge m) => MonadDischarge (IdentityT m) where
-    discharge f (IdentityT m) = lift $ (runIdentityT . f) `discharge` m
+    discharge (IdentityT m) f = lift $ discharge m (runIdentityT . f)
 
 instance (MonadDelegate m) => MonadDelegate (ReaderT env m) where
     delegate f = ReaderT $ \env -> delegate $ \k -> (`runReaderT` env) $ f (lift . k)
 
 instance (MonadDischarge m) => MonadDischarge (ReaderT env m) where
-    discharge f (ReaderT g) = ReaderT $ \r -> ((`runReaderT` r) . f) `discharge` (g r)
+    discharge (ReaderT g) f = ReaderT $ \r -> discharge (g r) ((`runReaderT` r) . f)
 
 -- | Instance that does real work using continuations
 instance Monad m => MonadDelegate (ContT () m) where
     delegate f = ContT $ \k -> evalContT $ f (lift . k)
 
 instance Monad m => MonadDischarge (ContT () m) where
-    discharge f (ContT g) = lift $ g (evalContT . f)
+    discharge (ContT g) f = lift $ g (evalContT . f)
 
 -- | There is no instance of 'MonadDischarge' for 'MaybeT'
 instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
@@ -153,8 +141,8 @@ finish = delegate . const $ pure ()
 -- (unless drainig the left producer results in empty)
 also :: (MonadDischarge m) => m a -> m a -> m a
 f `also` g = delegate $ \fire -> do
-    fire `discharge` f
-    fire `discharge` g
+    discharge f fire
+    discharge g fire
 
 -- | convert any monad (whether terminated with 'finish' or 'empty') its events as a Just
 -- followed by a final Nothing.
@@ -167,7 +155,7 @@ terminally m = (Just <$> (m `also` empty)) <|> pure Nothing
 dischargeHead :: (MonadST m, MonadDischarge m) => m a -> m (Maybe a)
 dischargeHead m = do
     v <- liftST $ newSTRef Nothing
-    discharge (go v) m
+    discharge m $ go v
     liftST $ readSTRef v
   where
     go v a = do
@@ -187,7 +175,7 @@ dischargeHead' m = (dischargeHead' m) <|> pure Nothing
 dischargeList :: (MonadST m, MonadDischarge m) => m a -> m [a]
 dischargeList m = do
     v <- liftST $ newSTRef DL.empty
-    discharge (\a -> liftST $ modifySTRef' v (`DL.snoc` a)) m
+    discharge m $ \a -> liftST $ modifySTRef' v (`DL.snoc` a)
     liftST $ DL.toList <$> readSTRef v
 
 -- | Variation of 'dischargeList' guaranteed to fire once
@@ -195,5 +183,5 @@ dischargeList m = do
 dischargeList' :: (MonadST m, Alternative m, MonadDischarge m) => m a -> m [a]
 dischargeList' m = do
     v <- liftST $ newSTRef DL.empty
-    discharge' (\a -> liftST $ modifySTRef' v (`DL.snoc` a)) m
+    discharge' m $ \a -> liftST $ modifySTRef' v (`DL.snoc` a)
     liftST $ DL.toList <$> readSTRef v

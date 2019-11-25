@@ -88,7 +88,7 @@ spec = do
                 v <- newIORef []
                 void $ runM $ do
                     let f a = liftIO $ modifyIORef v (a :)
-                    discharge f (delegate $ \_ -> pure ())
+                    discharge (delegate $ \_ -> pure ()) f
                     -- This only happens once
                     liftIO $ modifyIORef v ("test" :)
                 liftIO $ modifyIORef v ("end" :)
@@ -99,7 +99,7 @@ spec = do
                 v <- newIORef []
                 void $ runM $ do
                     let f a = liftIO $ modifyIORef v (a :)
-                    discharge f (m v)
+                    discharge (m v) f
                     -- This only happens once
                     liftIO $ modifyIORef v ("test" :)
                 liftIO $ modifyIORef v ("end" :)
@@ -111,7 +111,7 @@ spec = do
             it "delegate + discharge = id" $ do
                 v <- newIORef []
                 void $ runM $ do
-                    a <- delegate $ \fire -> discharge fire (m v)
+                    a <- delegate $ discharge (m v)
                     -- This happens once for every @a@
                     liftIO $ modifyIORef v (a :)
                 liftIO $ modifyIORef v ("end" :)
@@ -121,7 +121,7 @@ spec = do
             it "delegate + discharge = id (2)" $ do
                 v <- newIORef []
                 void $ runM $ do
-                    a <- delegate $ \fire -> discharge fire (delegate $ \_ -> pure ())
+                    a <- delegate $ discharge (delegate $ \_ -> pure ())
                     -- This happens once for every @a@
                     liftIO $ modifyIORef v ("never" :)
                     liftIO $ modifyIORef v (a :)
@@ -133,7 +133,7 @@ spec = do
             it "delegate + discharge = id (empty preserved)" $ do
                 v <- newIORef []
                 void $ runM $ do
-                    a <- (delegate $ \fire -> discharge fire (m v)) <|> pure "foo"
+                    a <- (delegate $ discharge (m v)) <|> pure "foo"
                     -- This happens once for every @a@
                     liftIO $ modifyIORef v (a :)
                 liftIO $ modifyIORef v ("end" :)
@@ -145,7 +145,7 @@ spec = do
             it "delegate + discharge != id (empty not preserved)" $ do
                 v <- newIORef []
                 void $ runM $ do
-                    a <- (delegate $ \fire -> discharge' fire (m v)) <|> pure "foo"
+                    a <- (delegate $ discharge' (m v)) <|> pure "foo"
                     -- This happens once for every @a@
                     liftIO $ modifyIORef v (a :)
                 liftIO $ modifyIORef v ("end" :)
@@ -156,7 +156,7 @@ spec = do
                 v <- newIORef []
                 void $ runM $ do
                     let f a = liftIO $ modifyIORef v (a :)
-                    discharge' f (m v)
+                    discharge' (m v) f
                     -- This only happens once
                     liftIO $ modifyIORef v ("test" :)
                 liftIO $ modifyIORef v ("end" :)
