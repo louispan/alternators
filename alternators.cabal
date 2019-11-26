@@ -52,6 +52,7 @@ test-suite test
   build-depends:       base >= 4.7 && < 5
                      , alternators
                      , hspec >= 2
+                     , monad-st >= 0.2
                      , mtl >= 2
                      , safe >= 0.3
                      , transformers >= 0.4

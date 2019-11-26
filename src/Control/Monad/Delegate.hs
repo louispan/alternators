@@ -58,7 +58,7 @@ class (Monad m) => MonadDelegate m where
 -- m = delegate $ discharge m
 -- @
 class MonadDelegate m => MonadDischarge m where
-    -- | This signature looks a bit like 'flip' 'bind'.
+    -- | This signature looks a bit like constrained 'bind'.
     -- Apply handler to @m a @ and result in a monad that will
     -- fire unit @()@ at most once.
     -- The input monad is fired and handled one after the other.
@@ -70,14 +70,6 @@ class MonadDelegate m => MonadDischarge m where
     discharge :: m a -> (a -> m ()) -> m ()
 
 infixl 1 `discharge` -- like `(>>=)`
-infixl 1 `discharge'` -- like `(>>=)`
-
--- | a variation of 'discharge' that also catches 'empty', resulting
--- in a monad that is guaranteed to fire unit @()@ once.
--- This is no longer an inverse of 'delegate'
--- delegate $ discharge' m = m without empty
-discharge' :: (MonadDischarge m, Alternative m) => m a -> (a -> m ()) -> m ()
-discharge' m f = (discharge m f) <|> pure ()
 
 instance (MonadDelegate m) => MonadDelegate (IdentityT m) where
     delegate f = IdentityT $ delegate $ \k -> runIdentityT $ f (lift . k)
@@ -164,10 +156,6 @@ dischargeHead m = do
             Nothing -> liftST $ writeSTRef v (Just a)
             Just _ -> pure ()
 
--- | Variation of 'dischargeHead' guaranteed to fire once
-dischargeHead' :: (MonadST m, Alternative m, MonadDischarge m) => m a -> m (Maybe a)
-dischargeHead' m = (dischargeHead' m) <|> pure Nothing
-
 -- | Collect all the times the monad fires @a@ into a list
 -- The result monad is guaranteed to fire @a@ most once (may fire nil list)
 -- If the 'discharge' monad results in 'empty',
@@ -178,10 +166,3 @@ dischargeList m = do
     discharge m $ \a -> liftST $ modifySTRef' v (`DL.snoc` a)
     liftST $ DL.toList <$> readSTRef v
 
--- | Variation of 'dischargeList' guaranteed to fire once
--- also also returns the list up to the 'empty' or 'finish'
-dischargeList' :: (MonadST m, Alternative m, MonadDischarge m) => m a -> m [a]
-dischargeList' m = do
-    v <- liftST $ newSTRef DL.empty
-    discharge' m $ \a -> liftST $ modifySTRef' v (`DL.snoc` a)
-    liftST $ DL.toList <$> readSTRef v

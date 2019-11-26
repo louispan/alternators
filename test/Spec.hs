@@ -4,15 +4,40 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.Delegate
+import Control.Monad.ST.Class
 import Control.Monad.Trans.ACont
 import Control.Monad.Trans.Cont (evalContT)
 import Control.Monad.Trans.Extras
 import Data.IORef
+import Data.STRef
 import Safe
 import Test.Hspec
 
 main :: IO ()
 main = hspec spec
+
+-- | a variation of 'discharge' that also catches 'empty', resulting
+-- in a monad that is guaranteed to fire unit @()@ once.
+-- This is no longer an inverse of 'delegate'
+-- delegate $ discharge' m = m without empty
+discharge' :: (MonadDischarge m, Alternative m) => m a -> (a -> m ()) -> m ()
+discharge' m f = (discharge m f) <|> pure ()
+infixl 1 `discharge'` -- like `(>>=)`
+
+-- | Variation of 'dischargeHead' guaranteed to fire once by catching 'empty'.
+-- Even if the input monad result in empty, if it fires at least once
+-- then 'dischargeHead'' will result in a Just
+dischargeHead' :: (MonadST m, Alternative m, MonadDischarge m) => m a -> m (Maybe a)
+dischargeHead' m = do
+    v <- liftST $ newSTRef Nothing
+    discharge' m $ go v
+    liftST $ readSTRef v
+  where
+    go v a = do
+        v' <- liftST $ readSTRef v
+        case v' of
+            Nothing -> liftST $ writeSTRef v (Just a)
+            Just _ -> pure ()
 
 empty' :: (Alternative m, MonadDelegate m) => m String
 empty' = empty
@@ -163,7 +188,7 @@ spec = do
                 as <- readIORef v
                 as `shouldBe` ["end", "test"] <> expected
 
-        testDischargeHead hasEmpty runM m expected = do
+        testDischargeHead hasEmpty runM m expected starting = do
             it "dischargeHead" $ do
                 v <- newIORef []
                 void $ runM $ do
@@ -171,12 +196,30 @@ spec = do
                     liftIO $ modifyIORef v (a :)
                 liftIO $ modifyIORef v ("end" :)
                 as <- readIORef v
-                let xs = [ show $ do
-                        bs <- initMay expected -- skip start
-                        headMay bs
-                        ]
-                    xs' = if hasEmpty then [] else xs
-                as `shouldBe` ["end"] <> xs' <> (maybe [] pure (headMay expected))
+                let xs = if hasEmpty then [] else [show $ headMay expected]
+                as `shouldBe` ["end"] <> xs <> starting
+
+        testDischargeHead' runM m expected starting = do
+            it "dischargeHead'" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    a <- show <$> dischargeHead' (m v)
+                    liftIO $ modifyIORef v (a :)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                let xs = [show $ headMay expected]
+                as `shouldBe` ["end"] <> xs <> starting
+
+        testDischargeList hasEmpty runM m expected starting = do
+            it "dischargeList" $ do
+                v <- newIORef []
+                void $ runM $ do
+                    as <- dischargeList (m v)
+                    liftIO $ modifyIORef v (as <>)
+                liftIO $ modifyIORef v ("end" :)
+                as <- readIORef v
+                let xs = if hasEmpty then [] else expected
+                as `shouldBe` ["end"] <> xs <> starting
 
     describe "Alternative: empty" $ do
         testBasic ((`evalMaybeT` ()) . evalAContT) (const empty) []
@@ -240,20 +283,44 @@ spec = do
 
     -------------------------------------------------------------
     describe "Alternative: discharge " $ do
-        let expected = ["done", "bye", "world", "hello", "start"]
-        testDischarge False ((`evalMaybeT` ()) . evalAContT) basic expected
-        testDischarge False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected
-        testDischarge True ((`evalMaybeT` ()) . evalAContT) (const empty) []
-        testDischarge True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
-        testDischarge True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
+        do
+            let expected = ["done", "bye", "world", "hello", "start"]
+            testDischarge False ((`evalMaybeT` ()) . evalAContT) basic expected
+            testDischarge False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected
+            testDischarge True ((`evalMaybeT` ()) . evalAContT) (const empty) []
+            testDischarge True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
+            testDischarge True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
 
-        testDischarge' False ((`evalMaybeT` ()) . evalAContT) basic expected
-        testDischarge' False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected
-        testDischarge' True ((`evalMaybeT` ()) . evalAContT) (const empty) []
-        testDischarge' True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
-        testDischarge' True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
+            testDischarge' False ((`evalMaybeT` ()) . evalAContT) basic expected
+            testDischarge' False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected
+            testDischarge' True ((`evalMaybeT` ()) . evalAContT) (const empty) []
+            testDischarge' True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
+            testDischarge' True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
 
-        testDischargeHead True ((`evalMaybeT` ()) . evalAContT) (const empty') []
+            testDischargeHead True ((`evalMaybeT` ()) . evalAContT) (\v -> start v empty') ([] :: [String]) ["start"]
+            testDischargeHead False ((`evalMaybeT` ()) . evalAContT) basic ["hello"] ["done", "start"]
+            testDischargeHead False ((`evalMaybeT` ()) . evalAContT) basicWithFinish ["hello"] ["done", "start"]
+            testDischargeHead True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty ([] :: [String]) ["done", "start"]
+            testDischargeHead True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty ([] :: [String]) ["done", "start"]
+
+        -- dischargeHead' catchs failures
+        do
+            let expected = ["hello"]
+                starting = ["done", "start"]
+            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) (\v -> start v empty') ([] :: [String]) ["start"]
+            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basic expected starting
+            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected starting
+            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected starting
+            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected starting
+
+        do
+            let expected = ["hello", "world", "bye"]
+                starting = ["done", "start"]
+            testDischargeList True ((`evalMaybeT` ()) . evalAContT) (\v -> start v empty') ([] :: [String]) ["start"]
+            testDischargeList False ((`evalMaybeT` ()) . evalAContT) basic expected starting
+            testDischargeList False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected starting
+            testDischargeList True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty ([] :: [String]) starting
+            testDischargeList True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty ([] :: [String]) starting
 
     describe "Alternative: terminally " $ do
         let expected = ["Nothing","done","Just \"bye\"","Just \"world\"","Just \"hello\"","start"]
@@ -261,11 +328,17 @@ spec = do
         testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinish v)) expected
         testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithEmpty v)) expected
         testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinishEmpty v)) expected
-        -- temrinally removes empty and finish effects
+
+        -- terminally removes empty and finish effects
         testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basic v)) expected
         testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinish v)) expected
         testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithEmpty v)) expected
         testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinishEmpty v)) expected
+
+    describe "Alternative: also " $ do
+        let expected = ["foo", "done", "bye", "world", "hello", "start"]
+        testBasic evalAContT (\v -> (basic v `also` empty `also` empty) <|> pure "foo") expected
+        testBasic evalAContT (\v -> (finish `also` basic v `also` empty `also` empty) <|> pure "foo") expected
 
     describe "ContT" $ do
         let expected = ["done", "bye", "world", "hello", "start"]
@@ -274,6 +347,11 @@ spec = do
         testDischarge False evalContT basic expected
         testDischarge False evalContT basicWithFinish expected
 
+        -- also
+        testBasic evalContT (\v -> basic v `also` finish) expected
+        testBasic evalContT (\v -> finish `also` basic v) expected
+        testBasic evalContT (\v -> finish `also` basic v `also` pure "foo") ("foo" : expected)
+
     describe "AContT" $ do
         let expected = ["done", "bye", "world", "hello", "start"]
         testBasic evalAContT basic expected
@@ -281,177 +359,3 @@ spec = do
         testDischarge False evalAContT basic expected
         testDischarge False evalAContT basicWithFinish expected
 
-
-    -- describe "AContT ()" $ do
-    --     -- testDelegate evalAContT basic
-    --     -- testDischarge evalAContT basic
-    --     it "delegateHead" $ do
-    --         v <- newIORef []
-    --         ((`evalMaybeT` ()) . evalAContT) $ do
-    --             a <- delegateHeadIO (basic v)
-    --             liftIO $ modifyIORef v (a :)
-    --         liftIO $ modifyIORef v ("end" :)
-    --         as <- readIORef v
-    --         as `shouldBe` ["end", "hello", "start"]
-
-
-    -- describe "AContT ()" $ do
-    --     -- testDelegate evalAContT basic
-    --     -- testDischarge evalAContT basic
-    --     it "delegateHead" $ do
-    --         v <- newIORef []
-    --         ((`evalMaybeT` ()) . evalAContT) $ do
-    --             a <- delegateHeadIO (basic v <|> pure "hi")
-    --             liftIO $ modifyIORef v (a :)
-    --         liftIO $ modifyIORef v ("end" :)
-    --         as <- readIORef v
-    --         as `shouldBe` ["end", "hello", "start"]
-
-
-    describe "MaybeT (ContT ())" $ do
-        -- testDelegate evalAContT basic
-        -- testDischarge evalAContT basic
-        it "finish also" $ do
-            v <- newIORef []
-            ((`evalMaybeT` ()) . evalAContT) $ do
-                a <- (finish `also` empty `also` empty) <|> pure "foo"
-                liftIO $ modifyIORef v (a :)
-            liftIO $ modifyIORef v ("end" :)
-            as <- readIORef v
-            as `shouldBe` ["end", "foo"]
-
-    describe "MaybeT (ContT ())" $ do
-        -- testDelegate evalAContT basic
-        -- testDischarge evalAContT basic
-        it "also is definitely after" $ do
-            v <- newIORef []
-            ((`evalMaybeT` ()) . evalAContT) $ do
-                a <- (basic v <|> pure "hi") `also` empty `also` empty <|> pure "foo"
-                liftIO $ modifyIORef v (a :)
-            liftIO $ modifyIORef v ("end" :)
-            as <- readIORef v
-            as `shouldBe` ["end", "foo", "done", "bye", "world", "hello", "start"]
-
-    describe "MaybeT (ContT ())" $ do
-        -- testDelegate evalAContT basic
-        -- testDischarge evalAContT basic
-        it "dischargeHead" $ do
-            v <- newIORef []
-            -- (void . runTerminateT . evalAContT) $ do
-            (void . evalContT) $ do
-                a <- dischargeHead (basic v)
-                case a of
-                    Nothing -> liftIO $ modifyIORef v ("Nothing" :)
-                    Just a' -> liftIO $ modifyIORef v (a' :)
-            liftIO $ modifyIORef v ("end" :)
-            as <- readIORef v
-            as `shouldBe` ["end", "hello", "done", "start"]
-
-    -- describe "MaybeT (ContT ()" $ do
-    --     -- testDelegate evalAContT basic
-    --     -- testDischarge evalAContT basic
-    --     it "delegateHead2" $ do
-    --         v <- newIORef []
-    --         -- (void . runTerminateT . evalAContT) $ do
-    --         (void . evalAContT) $ do
-    --             a <- delegateHead (basic v <|> pure "hi") -- `also` empty
-    --             liftIO $ modifyIORef v (a :)
-    --         liftIO $ modifyIORef v ("end" :)
-    --         as <- readIORef v
-    --         as `shouldBe` ["end", "hello", "start"]
-
-
-    describe "MaybeT (ContT ())" $ do
-        -- testDelegate evalAContT basic
-        -- testDischarge evalAContT basic
-        it "alternative" $ do
-            v <- newIORef []
-            ((`evalMaybeT` ()) . evalAContT) $ do
-                let m1 = pure "foo" `also` empty
-                    m2 = pure "bar" `also` empty
-                a <- m1 <|> m2 <|> (pure "hi")
-                liftIO $ modifyIORef v (a :)
-            liftIO $ modifyIORef v ("end" :)
-            as <- readIORef v
-            as `shouldBe` ["end", "hi", "bar", "foo"]
-
-        it "alternative2 also" $ do
-            v <- newIORef []
-            ((`evalMaybeT` ()) . evalAContT) $ do
-                let m2 = delegate $ \fire -> do
-                        fire "bar"
-                        empty
-                    m1 = m0 `also` empty -- FIXME: `also` doesn't work, doesn't respect empty
-                    m0 = delegate $ \fire -> do
-                        fire "foo"
-                        liftIO $ modifyIORef v ("wack" :)
-                        empty
-                        -- empty
-                a <- m1 <|> m2 <|> (pure "hi")
-                liftIO $ modifyIORef v (a :)
-            liftIO $ modifyIORef v ("end" :)
-            as <- readIORef v
-            as `shouldBe` ["end", "hi", "bar", "wack", "foo"]
-
-    -- describe "AContT () MaybeT" $ do
-    --     testDelegateAlternative ((`evalMaybeT` ()) . evalAContT) basic
-    --     testDischarge ((`evalMaybeT` ()) . evalAContT) basic
-
-    -- describe "MaybeT ContT" $ do
-    -- --     testDelegate (evalContT . (`evalMaybeT` ())) basic
-    -- --     testDelegateAlternative (evalContT . (`evalMaybeT` ())) basic
-    --     testDischarge ((`evalMaybeT` ()) . evalAContT) basic
-
-    --     it "discharge reduces it back to only firing once2" $ do
-    --         v <- newIORef []
-    --         void $ ((`evalMaybeT` ()) . evalAContT) $ do
-    --             let f a = do
-    --                     liftIO $ modifyIORef v (a :)
-    --                     empty -- NB. This empty doesn't get caught as it's in discharge
-    --                 m v' = do
-    --                     liftIO $ modifyIORef v' ("start" :)
-    --                     delegate $ \fire -> do
-    --                         fire "hello"
-    --                         fire "world"
-    --                         fire "bye"
-    --                         void $ empty
-    --                         empty
-    --             discharge f (m v <|> pure "extra" <|> pure "none")
-    --             -- This only happens once, but doesn't happen because of empty in f
-    --             liftIO $ modifyIORef v ("test" :)
-    --         liftIO $ modifyIORef v ("end" :)
-    --         as <- readIORef v
-    --         as `shouldBe` ["end"] <> ["none", "extra", "hello", "start"]
-
-    --     it "dischargeHead" $ do
-    --         v <- newIORef []
-    --         ((`evalMaybeT` ()) . evalAContT) $ do
-    --             a <- delegate $ \fire -> do
-    --                 -- for every event, fire it, then stop
-    --                 -- which means stop after first event
-    --                 a <- basic
-    --                 fire a
-    --                 lift empty
-
-    --             liftIO $ modifyIORef v (a :)
-    --         liftIO $ modifyIORef v ("end" :)
-    --         as <- readIORef v
-    --         as `shouldBe` ["end", "hello"]
-
-    -- describe "ExceptT AContT MaybeT" $ do
-    --     testDischarge ((`evalMaybeT` ()) . evalAContT . void . runExceptT) basic
-
-    --     it "dischargeHead" $ do
-    --         v <- newIORef []
-    --         ((`evalMaybeT` ()) . evalAContT . void . runExceptT) $ do
-    --             a <- delegate $ \fire -> do
-    --                 -- for every event, fire it, then stop
-    --                 -- which means stop after first event
-    --                 a <- basic
-    --                 fire a
-    --                 lift empty
-
-    --             liftIO $ modifyIORef v (a :)
-    --         liftIO $ modifyIORef v ("end" :)
-    --         as <- readIORef v
-    --         as `shouldBe` ["end", "hello"]
