@@ -8,7 +8,6 @@
 
 module Control.Monad.Delegate where
 
-import Control.Applicative
 import Control.Monad.Cont
 import Control.Monad.ST.Class
 import Control.Monad.Trans.Cont (evalContT)
@@ -25,8 +24,6 @@ import Data.STRef
 -- for each time the @a@ is fires.
 --
 -- A 'MonadDelegate' usually requires a 'ContT' or 'Control.Monad.AContT' in the transformer stack.
--- Consider using a @AContT r (MaybeT m)@ in your transformer stack as it allows an 'Alternative' instance.
--- which allows 'terminally' for detecting if an event is fired zero times.
 --
 -- Applicative instance has the following semantics:
 -- @pure x@ is a producer that fires @x@ once
@@ -41,7 +38,6 @@ import Data.STRef
 -- However, ,'finish' is monad that never returns and cannot be caught with '<|>'
 -- whereas 'empty' can be caught with '<|>'.
 --
--- Use 'terminally' to convert any monad (whether terminated with 'finish' or 'empty') to fire final 'Nothing' event.
 class (Monad m) => MonadDelegate m where
     -- | Delegates the handing of @a@ to a continuation.
     -- The intuition is that delegate allows deferring subsequent binds
@@ -67,6 +63,7 @@ class MonadDelegate m => MonadDischarge m where
     -- This results in a monad that is guaranteed to fire unit at most once
     -- even if the monad was 'finish'ed.
     -- (The final @m ()@ could still be 'empty')
+    -- The @()@ is fired after all the events of the input monad has been fired.
     discharge :: m a -> (a -> m ()) -> m ()
 
 infixl 1 `discharge` -- like `(>>=)`
@@ -104,8 +101,6 @@ instance (MonadDelegate m) => MonadDelegate (MaybeT m) where
 
 -- | There is no instance of 'MonadDischarge' for 'ExceptT'
 instance (MonadDelegate m) => MonadDelegate (ExceptT e m) where
-    -- terminally f = ExceptT $ terminally $ \terminate -> runExceptT $ f (lift terminate)
-    -- f :: ((a -> ExceptT e m ()) -> ExceptT e m ())
     delegate f = ExceptT . delegate $ \k -> do -- k :: (Either e a -> m ())
         -- Use the given @f@ handler with the 'Right' case of @k@
         er <- runExceptT . f $ lift . k . Right -- m (Either e ())
@@ -136,10 +131,11 @@ f `also` g = delegate $ \fire -> do
     discharge f fire
     discharge g fire
 
--- | convert any monad (whether terminated with 'finish' or 'empty') its events as a Just
--- followed by a final Nothing.
-terminally :: (MonadDischarge m, Alternative m) => m a -> m (Maybe a)
-terminally m = (Just <$> (m `also` empty)) <|> pure Nothing
+infixl 3 `also` -- like <|>
+
+-- | convert a monad to fire its events as a Just followed by a final Nothing.
+terminally :: MonadDischarge m => m a -> m (Maybe a)
+terminally m = Just <$> m `also` pure Nothing
 
 -- | Convert a monad that fires multiple times to something that might fire at most once.
 -- A Just or Nothing if nothing was fired.
@@ -155,6 +151,24 @@ dischargeHead m = do
         case v' of
             Nothing -> liftST $ writeSTRef v (Just a)
             Just _ -> pure ()
+
+
+-- -- | Convert a monad that fires multiple times to something that might fire at most once.
+-- -- A Just or Nothing if nothing was fired.
+-- -- If the 'discharge' monad results in 'empty', then 'dischargeHead' also results in empty
+-- dischargeHead :: (MonadST m, MonadDischarge m) => m a -> m (Maybe a)
+-- dischargeHead m = delegate $ \fire -> do
+--     v <- liftST $ newSTRef False
+--     discharge m (go fire v . Just)
+--     go fire v Nothing
+--   where
+--     go fire v a = do
+--         v' <- liftST $ readSTRef v
+--         if v'
+--             then pure ()
+--             else $ do
+--                 liftST $ writeSTRef v True
+--                 fire a
 
 -- | Collect all the times the monad fires @a@ into a list
 -- The result monad is guaranteed to fire @a@ most once (may fire nil list)

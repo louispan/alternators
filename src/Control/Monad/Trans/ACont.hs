@@ -14,6 +14,8 @@ module Control.Monad.Trans.ACont where
 import Control.Applicative
 import Control.Monad.Cont
 import Control.Monad.Delegate
+import Control.Monad.Reader
+import Control.Monad.State.Class
 
 -- | 'AContT' is a 'ContT' with an 'Alternative' instance.
 -- This means @AContT () MaybeT m@ is an instance of 'Alternative', 'MonadDelegate', and 'MonadDischarge'.
@@ -29,6 +31,8 @@ newtype AContT r m a = AContT { runAContT :: (a -> m r) -> m r }
         , Monad
         , MonadIO
         , MonadCont
+        , MonadReader r'
+        , MonadState s
         -- , MonadFail
         ) via (ContT r m)
 

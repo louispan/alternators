@@ -20,17 +20,17 @@ main = hspec spec
 -- in a monad that is guaranteed to fire unit @()@ once.
 -- This is no longer an inverse of 'delegate'
 -- delegate $ discharge' m = m without empty
-discharge' :: (MonadDischarge m, Alternative m) => m a -> (a -> m ()) -> m ()
-discharge' m f = (discharge m f) <|> pure ()
-infixl 1 `discharge'` -- like `(>>=)`
+dischargeA :: (MonadDischarge m, Alternative m) => m a -> (a -> m ()) -> m ()
+dischargeA m f = (discharge m f) <|> pure ()
+infixl 1 `dischargeA` -- like `(>>=)`
 
 -- | Variation of 'dischargeHead' guaranteed to fire once by catching 'empty'.
 -- Even if the input monad result in empty, if it fires at least once
 -- then 'dischargeHead'' will result in a Just
-dischargeHead' :: (MonadST m, Alternative m, MonadDischarge m) => m a -> m (Maybe a)
-dischargeHead' m = do
+dischargeHeadA :: (MonadST m, Alternative m, MonadDischarge m) => m a -> m (Maybe a)
+dischargeHeadA m = do
     v <- liftST $ newSTRef Nothing
-    discharge' m $ go v
+    dischargeA m $ go v
     liftST $ readSTRef v
   where
     go v a = do
@@ -41,6 +41,11 @@ dischargeHead' m = do
 
 empty' :: (Alternative m, MonadDelegate m) => m String
 empty' = empty
+
+-- | convert any monad (whether terminated with 'finish' or 'empty') its events as a Just
+-- followed by a final Nothing.
+terminally' :: (MonadDischarge m, Alternative m) => m a -> m (Maybe a)
+terminally' m = (Just <$> (m `also` empty)) <|> pure Nothing
 
 start :: (MonadDelegate m, MonadIO m) => IORef [String] -> m String -> m String
 start v m = do
@@ -154,7 +159,7 @@ spec = do
                 as <- readIORef v
                 as `shouldBe` ["end"]
 
-        testDischarge' hasEmpty runM m expected = do
+        testDischargeA hasEmpty runM m expected = do
             it "delegate + discharge = id (empty preserved)" $ do
                 v <- newIORef []
                 void $ runM $ do
@@ -167,21 +172,21 @@ spec = do
                     then as `shouldBe` ["end", "foo"] <> expected
                     else as `shouldBe` ["end"] <> expected
 
-            it "delegate + discharge != id (empty not preserved)" $ do
+            it "delegate + dischargeA != id (empty not preserved)" $ do
                 v <- newIORef []
                 void $ runM $ do
-                    a <- (delegate $ discharge' (m v)) <|> pure "foo"
+                    a <- (delegate $ dischargeA (m v)) <|> pure "foo"
                     -- This happens once for every @a@
                     liftIO $ modifyIORef v (a :)
                 liftIO $ modifyIORef v ("end" :)
                 as <- readIORef v
                 as `shouldBe` ["end"] <> expected
 
-            it "discharge' reduces it back to only firing once, even for empty" $ do
+            it "dischargeA reduces it back to only firing once, even for empty" $ do
                 v <- newIORef []
                 void $ runM $ do
                     let f a = liftIO $ modifyIORef v (a :)
-                    discharge' (m v) f
+                    dischargeA (m v) f
                     -- This only happens once
                     liftIO $ modifyIORef v ("test" :)
                 liftIO $ modifyIORef v ("end" :)
@@ -199,11 +204,11 @@ spec = do
                 let xs = if hasEmpty then [] else [show $ headMay expected]
                 as `shouldBe` ["end"] <> xs <> starting
 
-        testDischargeHead' runM m expected starting = do
-            it "dischargeHead'" $ do
+        testDischargeHeadA runM m expected starting = do
+            it "dischargeHeadA" $ do
                 v <- newIORef []
                 void $ runM $ do
-                    a <- show <$> dischargeHead' (m v)
+                    a <- show <$> dischargeHeadA (m v)
                     liftIO $ modifyIORef v (a :)
                 liftIO $ modifyIORef v ("end" :)
                 as <- readIORef v
@@ -291,11 +296,11 @@ spec = do
             testDischarge True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
             testDischarge True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
 
-            testDischarge' False ((`evalMaybeT` ()) . evalAContT) basic expected
-            testDischarge' False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected
-            testDischarge' True ((`evalMaybeT` ()) . evalAContT) (const empty) []
-            testDischarge' True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
-            testDischarge' True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
+            testDischargeA False ((`evalMaybeT` ()) . evalAContT) basic expected
+            testDischargeA False ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected
+            testDischargeA True ((`evalMaybeT` ()) . evalAContT) (const empty) []
+            testDischargeA True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected
+            testDischargeA True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected
 
             testDischargeHead True ((`evalMaybeT` ()) . evalAContT) (\v -> start v empty') ([] :: [String]) ["start"]
             testDischargeHead False ((`evalMaybeT` ()) . evalAContT) basic ["hello"] ["done", "start"]
@@ -307,11 +312,11 @@ spec = do
         do
             let expected = ["hello"]
                 starting = ["done", "start"]
-            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) (\v -> start v empty') ([] :: [String]) ["start"]
-            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basic expected starting
-            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected starting
-            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected starting
-            testDischargeHead' ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected starting
+            testDischargeHeadA ((`evalMaybeT` ()) . evalAContT) (\v -> start v empty') ([] :: [String]) ["start"]
+            testDischargeHeadA ((`evalMaybeT` ()) . evalAContT) basic expected starting
+            testDischargeHeadA ((`evalMaybeT` ()) . evalAContT) basicWithFinish expected starting
+            testDischargeHeadA ((`evalMaybeT` ()) . evalAContT) basicWithEmpty expected starting
+            testDischargeHeadA ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty expected starting
 
         do
             let expected = ["hello", "world", "bye"]
@@ -322,18 +327,18 @@ spec = do
             testDischargeList True ((`evalMaybeT` ()) . evalAContT) basicWithEmpty ([] :: [String]) starting
             testDischargeList True ((`evalMaybeT` ()) . evalAContT) basicWithFinishEmpty ([] :: [String]) starting
 
-    describe "Alternative: terminally " $ do
+    describe "Alternative: terminally' " $ do
         let expected = ["Nothing","done","Just \"bye\"","Just \"world\"","Just \"hello\"","start"]
-        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basic v)) expected
-        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinish v)) expected
-        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithEmpty v)) expected
-        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinishEmpty v)) expected
+        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basic v)) expected
+        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basicWithFinish v)) expected
+        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basicWithEmpty v)) expected
+        testBasic ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basicWithFinishEmpty v)) expected
 
         -- terminally removes empty and finish effects
-        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basic v)) expected
-        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinish v)) expected
-        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithEmpty v)) expected
-        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally (basicWithFinishEmpty v)) expected
+        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basic v)) expected
+        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basicWithFinish v)) expected
+        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basicWithEmpty v)) expected
+        testDischarge False ((`evalMaybeT` ()) . evalAContT) (\v -> show <$> terminally' (basicWithFinishEmpty v)) expected
 
     describe "Alternative: also " $ do
         let expected = ["foo", "done", "bye", "world", "hello", "start"]
