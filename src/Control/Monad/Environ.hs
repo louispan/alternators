@@ -17,11 +17,14 @@ module Control.Monad.Environ
     , askEnv
     , askEnv'
     , askTagged
-    -- , localEnv
-    -- , localEnv'
-    -- , localTagged
+    , localEnv
+    , localEnv'
+    , localTagged
     , MonadPut(..)
     , MonadPut'
+    , getEnv
+    , getEnv'
+    , getTagged
     , putEnv
     , putEnv'
     , putTagged
@@ -37,6 +40,8 @@ import qualified Control.Monad.RWS.Strict as Strict
 import Control.Monad.State.Class
 import qualified Control.Monad.State.Lazy as Lazy
 import qualified Control.Monad.State.Strict as Strict
+import Control.Monad.Trans.ACont as ACont
+import Control.Monad.Trans.Cont as Cont
 import Data.Proxy
 import Data.Tagged.Extras
 
@@ -45,10 +50,10 @@ import Data.Tagged.Extras
 class Monad m => MonadAsk p r m | p m -> r where
     -- | Retrieves the monad environment.
     askEnvP :: Proxy p -> m r
-    -- localEnvP :: Proxy p
-    --       -> (r -> r) -- ^ The function to modify the environment.
-    --       -> m a      -- ^ @Reader@ to run in the modified environment.
-    --       -> m a
+    localEnvP :: Proxy p
+          -> (r -> r) -- ^ The function to modify the environment.
+          -> m a      -- ^ @Reader@ to run in the modified environment.
+          -> m a
 
 type MonadAsk' r = MonadAsk r r
 
@@ -68,71 +73,72 @@ askEnv' = askEnvP @r Proxy
 askTagged :: forall tag r m. MonadAsk' (Tagged tag r) m => m r
 askTagged = (untag' @tag) <$> askEnvP @(Tagged tag r) Proxy
 
--- -- | 'localEnvP' without 'Proxy'.
--- -- Use with @TypeApplications@ to specify @p@
--- localEnv :: forall p r a m. MonadAsk p r m => (r -> r) -> m a -> m a
--- localEnv = localEnvP @p Proxy
+-- | 'localEnvP' without 'Proxy'.
+-- Use with @TypeApplications@ to specify @p@
+localEnv :: forall p r a m. MonadAsk p r m => (r -> r) -> m a -> m a
+localEnv = localEnvP @p Proxy
 
--- -- | Convenient version of 'localEnvP' for the simple case where @p@ matches @r@
--- -- Use with @TypeApplications@ to specify @r@
--- localEnv' :: forall r a m. MonadAsk' r m => (r -> r) -> m a -> m a
--- localEnv' = localEnvP @r Proxy
+-- | Convenient version of 'localEnvP' for the simple case where @p@ matches @r@
+-- Use with @TypeApplications@ to specify @r@
+localEnv' :: forall r a m. MonadAsk' r m => (r -> r) -> m a -> m a
+localEnv' = localEnvP @r Proxy
 
--- -- | Convenient version 'localEnvP' for the case where @p@ is @Tagged tag r@
--- -- but the tag is automatically unwrapped when used.
--- -- Use with @TypeApplications@ to specify @tag@
--- localTagged :: forall tag r a m. MonadAsk' (Tagged tag r) m => (r -> r) -> m a -> m a
--- localTagged f = localEnvP @(Tagged tag r) Proxy (Tagged @tag . f . untag' @tag)
+-- | Convenient version 'localEnvP' for the case where @p@ is @Tagged tag r@
+-- but the tag is automatically unwrapped when used.
+-- Use with @TypeApplications@ to specify @tag@
+localTagged :: forall tag r a m. MonadAsk' (Tagged tag r) m => (r -> r) -> m a -> m a
+localTagged f = localEnvP @(Tagged tag r) Proxy (Tagged @tag . f . untag' @tag)
 
 -- | Any transformer on top of 'MonadAsk' is also a 'MonadAsk'
-instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadAsk p r m) => MonadAsk p r (t m) where
+instance {-# OVERLAPPABLE #-} (Monad (t m), MFunctor t, MonadTrans t, MonadAsk p r m) => MonadAsk p r (t m) where
     askEnvP = lift . askEnvP
-    -- localEnvP p f = hoist (localEnvP p f)
+    localEnvP p f = hoist (localEnvP p f)
 
--- -- | ContT is not an instance of MFunctor, so implement this one explicitly
--- instance {-# OVERLAPPABLE #-} (MonadAsk p r m) => MonadAsk p r (ContT x m) where
---     askEnvP = lift . askEnvP
---     -- localEnvP p = Cont.liftLocal (askEnvP p) (localEnvP p)
+-- | ContT is not an instance of MFunctor, so implement this one explicitly
+instance {-# OVERLAPPABLE #-} (MonadAsk p r m) => MonadAsk p r (ContT x m) where
+    askEnvP = lift . askEnvP
+    localEnvP p = Cont.liftLocal (askEnvP p) (localEnvP p)
 
--- -- | AContT is not an instance of MFunctor, so implement this one explicitly
--- instance {-# OVERLAPPABLE #-} (MonadAsk p r m) => MonadAsk p r (AContT x m) where
---     askEnvP = lift . askEnvP
---     -- localEnvP p = ACont.liftLocal (askEnvP p) (localEnvP p)
+-- | AContT is not an instance of MFunctor, so implement this one explicitly
+instance {-# OVERLAPPABLE #-} (MonadAsk p r m) => MonadAsk p r (AContT x m) where
+    askEnvP = lift . askEnvP
+    localEnvP p = ACont.liftLocal (askEnvP p) (localEnvP p)
 
 instance {-# OVERLAPPABLE #-} Monad m => MonadAsk r r (ReaderT r m) where
     askEnvP _ = ask
-    -- localEnvP _ = local
-
-instance {-# OVERLAPPABLE #-} Monad m => MonadAsk s s (Strict.StateT s m) where
-    askEnvP _ = get
-    -- localEnvP _ = Strict.withStateT
-
-instance {-# OVERLAPPABLE #-} Monad m => MonadAsk s s (Lazy.StateT s m) where
-    askEnvP _ = get
-    -- localEnvP _ = Lazy.withStateT
+    localEnvP _ = local
 
 instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk r r (Strict.RWST r w s m) where
     askEnvP _ = ask
-    -- localEnvP _ = local
+    localEnvP _ = local
 
 instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk r r (Lazy.RWST r w s m) where
     askEnvP _ = ask
-    -- localEnvP _ = local
-
-instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk s s (Strict.RWST r w s m) where
-    askEnvP _ = get
-    -- localEnvP _ f = Strict.withRWST (\r s -> (r, f s))
-
-instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadAsk s s (Lazy.RWST r w s m) where
-    askEnvP _ = get
-    -- localEnvP _ f = Lazy.withRWST (\r s -> (r, f s))
+    localEnvP _ = local
 
 -- | like 'MonadState' but with overlapping instances.
 -- The 'Proxy' @p@ allows controlled inference of @p m -> s@.
-class MonadAsk p s m => MonadPut p s m | p m -> s where
+class Monad m => MonadPut p s m | p m -> s where
+    getEnvP :: Proxy p -> m s
     putEnvP :: Proxy p -> s -> m ()
 
 type MonadPut' s = MonadPut s s
+
+-- | 'getEnvP' without 'Proxy'.
+-- Use with @TypeApplications@ to specify @p@
+getEnv :: forall p s m. MonadPut p s m => m s
+getEnv = getEnvP @p Proxy
+
+-- | Convenient version 'getEnvP' for the simple case where @p@ matches @r@
+-- Use with @TypeApplications@ to specify @r@
+getEnv' :: forall s m. MonadPut' s m => m s
+getEnv' = getEnvP @s Proxy
+
+-- | Convenient version 'getEnvP' for the case where @p@ is @Tagged tag r@
+-- but the tag is automatically unwrapped when used.
+-- Use with @TypeApplications@ to specify @tag@
+getTagged :: forall tag s m. MonadPut' (Tagged tag s) m => m s
+getTagged = (untag' @tag) <$> getEnvP @(Tagged tag s) Proxy
 
 -- | 'putEnvP' without 'Proxy'.
 -- Use with @TypeApplications@ to specify @p@
@@ -149,33 +155,29 @@ putEnv' = putEnvP @s Proxy
 putTagged :: forall tag s m. MonadPut' (Tagged tag s) m => s -> m ()
 putTagged s = putEnvP @(Tagged tag s) Proxy (Tagged @tag s)
 
--- | Requires 'MFunctor' for the 'MonadAsk' transformer instance
 instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadPut p s m, Monad m) => MonadPut p s (t m) where
+    getEnvP = lift . getEnvP
     putEnvP p = lift . putEnvP p
 
--- -- | ContT is not an instance of MFunctor, so implement this one explicitly
--- instance {-# OVERLAPPABLE #-} (Monad m, MonadPut p s m) => MonadPut p s (ContT x m) where
---     putEnvP p = lift . putEnvP p
-
--- -- | ContT is not an instance of MFunctor, so implement this one explicitly
--- instance {-# OVERLAPPABLE #-} (Monad m, MonadPut p s m) => MonadPut p s (AContT x m) where
---     putEnvP p = lift . putEnvP p
-
-instance {-# OVERLAPPABLE #-} (Monad m, MonadAsk s s (Strict.StateT s m)) => MonadPut s s (Strict.StateT s m) where
+instance {-# OVERLAPPABLE #-} (Monad m) => MonadPut s s (Strict.StateT s m) where
+    getEnvP _ = get
     putEnvP _ = put
 
-instance {-# OVERLAPPABLE #-} (Monad m, MonadAsk s s (Lazy.StateT s m)) => MonadPut s s (Lazy.StateT s m) where
+instance {-# OVERLAPPABLE #-} (Monad m) => MonadPut s s (Lazy.StateT s m) where
+    getEnvP _ = get
     putEnvP _ = put
 
-instance {-# OVERLAPPABLE #-} (Monoid w, Monad m, MonadAsk s s (Strict.RWST r w s m)) => MonadPut s s (Strict.RWST r w s m) where
+instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadPut s s (Strict.RWST r w s m) where
+    getEnvP _ = get
     putEnvP _ = put
 
-instance {-# OVERLAPPABLE #-} (Monoid w, Monad m, MonadAsk s s (Lazy.RWST r w s m)) => MonadPut s s (Lazy.RWST r w s m) where
+instance {-# OVERLAPPABLE #-} (Monoid w, Monad m) => MonadPut s s (Lazy.RWST r w s m) where
+    getEnvP _ = get
     putEnvP _ = put
 
 modifyEnvP :: forall p s m. MonadPut p s m => Proxy p -> (s -> s) -> m ()
 modifyEnvP p f = do
-    s <- askEnvP p
+    s <- getEnvP p
     putEnvP p $! f s
 
 -- | 'modifyEnvP' without 'Proxy'.
