@@ -51,7 +51,7 @@ class (Monad m) => MonadDelegate m where
 --
 -- Law:
 -- @
--- m = delegate $ discharge m
+-- m = delegate $ discharge m = delegate $ \fire -> discharge m fire
 -- @
 class MonadDelegate m => MonadDischarge m where
     -- | This signature looks a bit like constrained 'bind'.
