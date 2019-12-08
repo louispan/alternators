@@ -12,8 +12,8 @@
 
 module Control.Monad.Observer
     ( module Data.Proxy
-    , MonadObserver(..)
-    , MonadObserver'
+    , Observer(..)
+    , Observer'
     , ObserverT
     , runObserverT
     -- , runObserverTagged
@@ -42,15 +42,15 @@ import Data.Tagged.Extras
 -- The 'Proxy' @p@ allows controlled inference of @p m -> a@.
 -- The main instance of 'Observer' is the 'ReaderT' instance which holds a function
 -- @a -> m ()@, ie not @a -> ReaderT m ()@ otherwise there will be a @ReaderT m ~ m@ compile error.
-class Monad m => MonadObserver p a m | p m -> a where
+class Monad m => Observer p a m | p m -> a where
     askObserver :: Proxy p -> m (a -> m ())
 
-type MonadObserver' a = MonadObserver a a
+type Observer' a = Observer a a
 
-instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, MonadObserver p a m) => MonadObserver p a (t m) where
+instance {-# OVERLAPPABLE #-} (Monad (t m), MonadTrans t, Observer p a m) => Observer p a (t m) where
     askObserver p = lift $ (lift .) <$> askObserver p
 
-instance {-# OVERLAPPABLE #-} Monad m => MonadObserver p a (ReaderT (a -> m ()) m) where
+instance {-# OVERLAPPABLE #-} Monad m => Observer p a (ReaderT (a -> m ()) m) where
     askObserver _ = (lift .) <$> ask
 
 type ObserverT a m = ReaderT (a -> m ()) m
@@ -83,37 +83,37 @@ unobserve2 m = delegate2 $ \(f, g) -> runObserverT m g >>= f
 unobserveTagged2 :: forall tag a r m. MonadDelegate m => ObserverT (Tagged tag a) m r -> m (Either r a)
 unobserveTagged2 m = delegate2 $ \(f, g) -> runObserverT @(Tagged tag a) m (g . untag' @tag) >>= f
 
--- | Fire an event @a@ where the 'MonadObserver' type ambiguity is resolved by the given 'Proxy' @p@
-observeP :: forall p a m. MonadObserver p a m => Proxy p -> a -> m ()
+-- | Fire an event @a@ where the 'Observer' type ambiguity is resolved by the given 'Proxy' @p@
+observeP :: forall p a m. Observer p a m => Proxy p -> a -> m ()
 observeP p a = askObserver p >>= ($ a)
 
--- | 'MonadObserver' where the proxy @p@ is specified with @TypeApplications'
-observe :: forall p a m. MonadObserver p a m => a -> m ()
+-- | 'Observer' where the proxy @p@ is specified with @TypeApplications'
+observe :: forall p a m. Observer p a m => a -> m ()
 observe a = observeP @p Proxy a
 
 -- | Convenient version of 'observe' for the case where the 'Proxy' @p@ and @a@ are the same
-observe' :: forall a m. MonadObserver' a m => a -> m ()
+observe' :: forall a m. Observer' a m => a -> m ()
 observe' = observeP @a Proxy
 
 -- -- | Convenient version of 'observe'' for the case where event is @Tagged tag a@
--- observeTagged :: forall tag a m. MonadObserver' (Tagged tag a) m => a -> m ()
+-- observeTagged :: forall tag a m. Observer' (Tagged tag a) m => a -> m ()
 -- observeTagged a = observe' (Tagged @tag a)
 
--- | like 'fmap'ing the observed value where the 'MonadObserver' type ambiguity is resolved by the given 'Proxy' @p@
-reobserveP :: forall p a b r m. MonadObserver p b m => Proxy p -> (a -> b) -> ObserverT a m r -> m r
+-- | like 'fmap'ing the observed value where the 'Observer' type ambiguity is resolved by the given 'Proxy' @p@
+reobserveP :: forall p a b r m. Observer p b m => Proxy p -> (a -> b) -> ObserverT a m r -> m r
 reobserveP p f m = runObserverT m (observeP p . f)
 
 -- | 'reobserveP' where the proxy @p@ is specified with @TypeApplications'
-reobserve :: forall p a b r m. MonadObserver p b m => (a -> b) -> ObserverT a m r -> m r
+reobserve :: forall p a b r m. Observer p b m => (a -> b) -> ObserverT a m r -> m r
 reobserve = reobserveP @p Proxy
 
 -- | 'reobserveP' for the case where the 'Proxy' @p@ and @a@ are the same
-reobserve' :: forall a b r m. MonadObserver' b m => (a -> b) -> ObserverT a m r -> m r
+reobserve' :: forall a b r m. Observer' b m => (a -> b) -> ObserverT a m r -> m r
 reobserve' = reobserveP @b Proxy
 
 -- | 'reobserveP' for the case where event is @Tagged tag a@
 -- but the tag is automatically unwrapped when used.
-reobserveTagged :: forall tagA tagB a b r m. MonadObserver' (Tagged tagB b) m => (a -> b) -> ObserverT (Tagged tagA a) m r -> m r
+reobserveTagged :: forall tagA tagB a b r m. Observer' (Tagged tagB b) m => (a -> b) -> ObserverT (Tagged tagA a) m r -> m r
 reobserveTagged f = reobserve' @(Tagged tagA a) @(Tagged tagB b) (Tagged @tagB . f . untag' @tagA)
 
 
